@@ -12,9 +12,9 @@ import { setupCommands } from './core/commands';
  * Registers the plugin with joplin.                                                                                                                *
  ***************************************************************************************************************************************************/
 joplin.plugins.register({
-    onStart: main,
-});
-
+  async onStart() {
+    await main();
+  }});
 /** Main ********************************************************************************************************************************************
  * Calls all the functions needed to initialize the plugin                                                                                          *
  ***************************************************************************************************************************************************/
@@ -26,4 +26,7 @@ async function main() {
     await setupMenu()
     await setupToolbar()
     await setupTimer()
+
+    console.log('Joplin Repeating Todos Plugin loaded!');
 }
+
