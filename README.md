@@ -1,4 +1,4 @@
-# Jolpin Repeating To-Dos
+# Joplin Repeating To-Dos
 
 A powerful and comprehensive plugin for to-do repetition/recurrence
 
@@ -98,3 +98,9 @@ Debugging can also be aided by launching joplin in development mode to be used a
 The repeating to-do plugin will need to be added as a development plugin. 
 
 Once you have made your changes, commit, and push your changes to your fork and create a pull request on GitLab
+
+## Tags
+
+joplin-plugin-repeating-to-dos-v2
+
+joplin-plugin
