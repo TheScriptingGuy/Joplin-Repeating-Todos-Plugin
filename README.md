@@ -2,9 +2,9 @@
 
 A powerful and comprehensive plugin for to-do repetition/recurrence
 
-## Archive Notice
-As I've moved from Joplin to Trillium-Next and due to lack of time, this repository has been archived. If anyone with suitable coding skills wants to create a fork and continue maintaining it, you have my blessings. 
+## NPM Location
 
+https://www.npmjs.com/package/joplin-plugin-repeating-to-dos-v2
 
 ## Overview
 This plugin allows to-do's in joplin to be repeated based on the to-do alarm date. When a to-do is checked as complete, the todo alarm date is immediately reset to the next recurrence date, and the to-do is unmarked as completed. 
