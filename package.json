@@ -43,7 +43,7 @@
     "browserify": "^17.0.0",
     "date-fns": "^2.20.0",
     "reflect-metadata": "^0.1.13",
-    "sqlite3": "^5.0.2",
+    "js-yaml": "^4.1.0",
     "stream-browserify": "*",
     "typeorm": "^0.2.32"
   },
