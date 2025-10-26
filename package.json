@@ -1,6 +1,10 @@
 {
   "name": "joplin-plugin-repeating-to-dos-v2",
-  "version": "1.0.0",
+  "author":"TheScriptingGuy",
+  "description": "A Joplin plugin to create repeating to-dos (version 2)",
+
+  "version": "1.0.3",
+  "publishConfig": { "access": "public" },
   "scripts": {
     "dist": "webpack --env joplin-plugin-config=buildMain && webpack --env joplin-plugin-config=buildExtraScripts && webpack --env joplin-plugin-config=createArchive",
     "prepare": "npm run dist",
@@ -9,7 +13,13 @@
   },
   "license": "MIT",
   "keywords": [
-    "joplin-plugin"
+    "joplin-plugin",
+    "joplin", 
+    "to-do", 
+    "repeat", 
+    "repeating", 
+    "recurring", 
+    "reccur"
   ],
   "devDependencies": {
     "@types/node": "^18.7.13",
