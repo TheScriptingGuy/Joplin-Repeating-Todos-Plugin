@@ -82,9 +82,20 @@ async function findTagIdByTitle(tagTitle: string): Promise<string> {
   const matchingTag = (allTags?.items || []).find((tag: { id: string; title: string }) => tag.title === tagTitle);
   let tag_id = matchingTag ? matchingTag.id : null;  
   if (!tag_id) {
-        // Create the tag if it doesn't exist
-        const newTag = await joplin.data.post(['tags'], null, { title: "recurring" });
-        tag_id = newTag.id;
+        try {
+            // Create the tag if it doesn't exist
+            const newTag = await joplin.data.post(['tags'], null, { title: "recurring" });
+            tag_id = newTag.id;
+        }
+        catch (error) {
+            console.warn("Error creating 'recurring' tag: " + error);
+        }
+        finally {
+            const allTags = await joplin.data.get(['tags'], { fields: ['id', 'title'] });
+            const matchingTag = (allTags?.items || []).find((tag: { id: string; title: string }) => tag.title === tagTitle);
+            tag_id = matchingTag ? matchingTag.id : null;  
+        }
+
     }
   return tag_id;
 }
@@ -130,7 +141,7 @@ export async function getAllRecords() {
             results.push(note);
         }
         if (!recurrenceData) {
-            console.error(`No recurrence data found for note ID ${note.id}; skipping.`);
+            console.warn(`No recurrence data found for note ID ${note.id}; skipping.`);
             deleteRecord(note.id);
         }
         
@@ -158,7 +169,7 @@ export async function getRecord(id: string): Promise<Recurrence> {
     }
     const recurrenceData = extractFrontmatter(note.body);
     if (!recurrenceData) {
-        console.error("No recurrence data found; deleting and recreate record.");
+        console.warn("No recurrence data found; deleting and recreate record.");
         deleteRecord(id);
         createRecord(id, new Recurrence());
     }
