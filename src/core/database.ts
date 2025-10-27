@@ -116,13 +116,12 @@ export async function getAllRecords() {
     let tag_id = await findTagIdByTitle("recurring");
     
     const notesResponse = await joplin.data.get(['tags', tag_id, 'notes'], {
+        where: 'is_todo = 1 and todo_due != 0',
         fields: ['id', 'body', 'title', 'is_todo', 'todo_due','todo_completed'] 
     });
-
-
     const allTagNotes = notesResponse?.items || [];
 
-    const filteredNotes = allTagNotes.filter(note => note.is_todo === 1 && note.todo_due == 0);
+    const filteredNotes = allTagNotes.filter(note => note.is_todo === 1 && note.todo_due != 0);
 
     const results = [];
     for (const note of filteredNotes) {

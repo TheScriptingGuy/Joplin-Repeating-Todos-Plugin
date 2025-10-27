@@ -3,7 +3,7 @@
   "author":"TheScriptingGuy",
   "description": "A Joplin plugin to create repeating to-dos (version 2)",
 
-  "version": "1.0.3",
+  "version": "1.0.7",
   "publishConfig": { "access": "public" },
   "scripts": {
     "dist": "webpack --env joplin-plugin-config=buildMain && webpack --env joplin-plugin-config=buildExtraScripts && webpack --env joplin-plugin-config=createArchive",

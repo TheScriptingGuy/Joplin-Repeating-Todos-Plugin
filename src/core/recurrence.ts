@@ -31,10 +31,10 @@ export async function updateAllRecurrences(){
     updating = true;
 
     var allRecurrences = await getAllRecords()
-
-    for (var record of allRecurrences){
-        console.log(record)
-        await processTodo(record)
+    for (let i = 0; i < allRecurrences.length; i++) {
+        var record = allRecurrences[i];  // Extract the record for cleaner reading
+        
+        await processTodo(record);
     }
 
     updating = false;
@@ -89,10 +89,10 @@ export async function updateOverdueTodos(){
 async function processTodo(todo, after=null){
 
     var recurrence = await getRecord(todo.id)
-    if ((todo.todo_completed != 0) && (recurrence.enabled)){
+
+    if ((todo.todo_completed != 0) && (todo.todo_due != 0)  && (recurrence.enabled)){
         var initialDate = new Date(todo.todo_due)
         var nextDate = after == null ? recurrence.getNextDate(initialDate) : recurrence.getNextDateAfter(initialDate, after)
-
         await setTaskDueDate(todo.id, nextDate)
         await markTaskIncomplete(todo.id)
         await markSubTasksIncomplete(todo.id)
