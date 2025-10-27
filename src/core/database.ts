@@ -116,7 +116,7 @@ export async function getAllRecords() {
     let tag_id = await findTagIdByTitle("recurring");
     
     const notesResponse = await joplin.data.get(['tags', tag_id, 'notes'], {
-        fields: ['id', 'body', 'is_todo', 'todo_due'] 
+        fields: ['id', 'body', 'title', 'is_todo', 'todo_due','todo_completed'] 
     });
 
 
@@ -128,11 +128,7 @@ export async function getAllRecords() {
     for (const note of filteredNotes) {
         const recurrenceData = extractFrontmatter(note.body);
         if (recurrenceData) {
-            results.push({
-                id: note.id,
-                todo_due: note.todo_due,
-                recurrence: getRecordAsRecurrence(recurrenceData)
-            });
+            results.push(note);
         }
         if (!recurrenceData) {
             console.error(`No recurrence data found for note ID ${note.id}; skipping.`);
