@@ -5,7 +5,6 @@ import { createRecord, getAllRecords, getRecord, updateRecord, deleteRecord} fro
 import { getAllNotes, getNote, markTaskIncomplete, setTaskDueDate, markSubTasksIncomplete, markTaskComplete } from "./joplin";
 import { Recurrence } from '../model/recurrence';
 import { sleep } from './misc';
-import { start } from 'repl';
 
 
 var updating = false;
@@ -30,51 +29,56 @@ var updating = false;
 export async function updateAllRecurrences(){
     if (updating) return;
     updating = true;
-    var allNotes = await getAllNotes()
+
     var allRecurrences = await getAllRecords()
-    for (var note of allNotes){
-        if (!allRecurrences.some(record => record.id == note.id)){
-            await createRecord(note.id, new Recurrence())
-        }
-        await processTodo(note)
+    for (let i = 0; i < allRecurrences.length; i++) {
+        var record = allRecurrences[i];  // Extract the record for cleaner reading
+        
+        await processTodo(record);
     }
-    for (var record of allRecurrences){
-        if (!allNotes.some(note => note.id == record.id)){
-            await deleteRecord(record.id)
-        }
-    }
+
     updating = false;
 }
 
 
 export async function setOverdueTodosToToday(){
-    var startOfToday = new Date();
-    startOfToday.setHours(0,0,0,0);
-    for (var note of await getAllNotes()){
-        var recurrence = await getRecord(note.id)
-        var dueDate = new Date(note.todo_due)
-        if ((note.todo_due != 0) && (recurrence != null) && (recurrence.enabled) && (dueDate < startOfToday)){
-            var newDueDate = startOfToday
-            newDueDate.setHours(dueDate.getHours(), dueDate.getMinutes(), dueDate.getSeconds(), dueDate.getMilliseconds())
-            await setTaskDueDate(note.id, newDueDate)
-            await sleep(1000)
+    try{
+        var startOfToday = new Date();
+        startOfToday.setHours(0,0,0,0);
+        for (var note of await getAllNotes()){
+            var recurrence = await getRecord(note.id)
+            var dueDate = new Date(note.todo_due)
+            if ((note.todo_due != 0) && (recurrence != null) && (recurrence.enabled) && (dueDate < startOfToday)){
+                var newDueDate = startOfToday
+                newDueDate.setHours(dueDate.getHours(), dueDate.getMinutes(), dueDate.getSeconds(), dueDate.getMilliseconds())
+                await setTaskDueDate(note.id, newDueDate)
+                await sleep(1000)
+            }
         }
+        joplin.views.dialogs.showMessageBox("Overdue Tasks Rescheduled")
     }
-    joplin.views.dialogs.showMessageBox("Overdue Tasks Rescheduled")
+    catch (error) {
+        console.error("Error setting overdue todos to today: " + error)
+    }   
 }
 
 export async function updateOverdueTodos(){
-    var startOfToday = new Date();
-    startOfToday.setHours(0,0,0,0);
-    for (var note of await getAllNotes()){
-        var recurrence = await getRecord(note.id)
-        if ((note.todo_due != 0) && (recurrence != null) && (recurrence.enabled) && (new Date(note.todo_due) < startOfToday)){
-            await markTaskComplete(note.id)
-            await processTodo(note, startOfToday)
-            await sleep(1000)    
+    try{
+        var startOfToday = new Date();
+        startOfToday.setHours(0,0,0,0);
+        for (var note of await getAllNotes()){
+            var recurrence = await getRecord(note.id)
+            if ((note.todo_due != 0) && (recurrence != null) && (recurrence.enabled) && (new Date(note.todo_due) < startOfToday)){
+                await markTaskComplete(note.id)
+                await processTodo(note, startOfToday)
+                await sleep(1000)    
+            }
         }
+        joplin.views.dialogs.showMessageBox("Overdue Tasks Rescheduled")
     }
-    joplin.views.dialogs.showMessageBox("Overdue Tasks Rescheduled")
+    catch (error) {
+        console.error("Error updating overdue todos: " + error)
+    }
 }
 
 /** processTodo *************************************************************************************************************************************
@@ -83,8 +87,10 @@ export async function updateOverdueTodos(){
  * falls below 1.                                                                                                                                   *
  ***************************************************************************************************************************************************/
 async function processTodo(todo, after=null){
+
     var recurrence = await getRecord(todo.id)
-    if ((todo.todo_completed != 0) && (todo.todo_due != 0) && (recurrence.enabled)){
+
+    if ((todo.todo_completed != 0) && (todo.todo_due != 0)  && (recurrence.enabled)){
         var initialDate = new Date(todo.todo_due)
         var nextDate = after == null ? recurrence.getNextDate(initialDate) : recurrence.getNextDateAfter(initialDate, after)
         await setTaskDueDate(todo.id, nextDate)
@@ -93,4 +99,5 @@ async function processTodo(todo, after=null){
         recurrence.updateStopStatus()
         updateRecord(todo.id, recurrence)
     }
+
 }
