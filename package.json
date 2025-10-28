@@ -1,10 +1,11 @@
 {
   "name": "joplin-plugin-repeating-to-dos-v2",
-  "author":"TheScriptingGuy",
+  "author": "TheScriptingGuy",
   "description": "A Joplin plugin to create repeating to-dos (version 2)",
-
-  "version": "1.0.7",
-  "publishConfig": { "access": "public" },
+  "version": "1.0.9",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dist": "webpack --env joplin-plugin-config=buildMain && webpack --env joplin-plugin-config=buildExtraScripts && webpack --env joplin-plugin-config=createArchive",
     "prepare": "npm run dist",
@@ -14,15 +15,23 @@
   "license": "MIT",
   "keywords": [
     "joplin-plugin",
-    "joplin", 
-    "to-do", 
-    "repeat", 
-    "repeating", 
-    "recurring", 
+    "joplin",
+    "to-do",
+    "repeat",
+    "repeating",
+    "recurring",
     "reccur"
   ],
   "devDependencies": {
+    "@babel/cli": "^7.28.3",
+    "@babel/core": "^7.28.5",
+    "@babel/preset-env": "^7.28.5",
+    "@babel/preset-react": "^7.28.5",
+    "@babel/preset-typescript": "^7.28.5",
     "@types/node": "^18.7.13",
+    "babel-loader": "^10.0.0",
+    "babel-plugin-function-try-catch": "^1.1.0",
+    "babel-plugin-try-catch-wrapper": "^0.2.2",
     "chalk": "^4.1.0",
     "copy-webpack-plugin": "^11.0.0",
     "esbuild-loader": "^4.4.0",
@@ -42,8 +51,8 @@
   "dependencies": {
     "browserify": "^17.0.0",
     "date-fns": "^2.20.0",
-    "reflect-metadata": "^0.1.13",
     "js-yaml": "^4.1.0",
+    "reflect-metadata": "^0.1.13",
     "stream-browserify": "*",
     "typeorm": "^0.2.32"
   },
