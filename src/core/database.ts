@@ -24,16 +24,15 @@ export class Database {
 
   @Trace()
   /** Helper: Extract YAML frontmatter from note body */
-  private static extractFrontmatter(body: string): any | null {
+  private static async extractFrontmatter(body: string): Promise<any | null> {
     if (!body) return null;
-    const frontmatterMatch = body.match(/^---\s*\n([\s\S]*?)\n---\s*\n/);
-    if (!frontmatterMatch) return null;
+    const match = body.match(/^---\s*\n([\s\S]*?)\n---\s*\n/);
+    if (!match) return null;
     try {
-      const frontmatter = yaml.load(frontmatterMatch[1]);
-      return frontmatter?.['joplin-recurrence'] || null;
-    } catch (e: any) {
-      console.error('Failed to parse YAML frontmatter:', e.message);
-      return null;
+        const data = yaml.load(match[1]);
+        return data?.['joplin-recurrence'] ?? null;
+    } catch {
+        return null;
     }
   }
 
@@ -42,32 +41,38 @@ export class Database {
   @TryCatch({ logError: true })
   private static async injectFrontmatter(id: string, recurrence: Recurrence, originalBody: string): Promise<string> {
     const recurrenceData = {
-      enabled: recurrence.enabled,
-      interval: recurrence.interval,
-      intervalNumber: recurrence.intervalNumber,
-      weekSunday: recurrence.weekSunday,
-      weekMonday: recurrence.weekMonday,
-      weekTuesday: recurrence.weekTuesday,
-      weekWednesday: recurrence.weekWednesday,
-      weekThursday: recurrence.weekThursday,
-      weekFriday: recurrence.weekFriday,
-      weekSaturday: recurrence.weekSaturday,
-      monthOrdinal: recurrence.monthOrdinal,
-      monthWeekday: recurrence.monthWeekday,
-      stopType: recurrence.stopType,
-      stopDate: recurrence.stopDate,
-      stopNumber: recurrence.stopNumber,
+        enabled: recurrence.enabled,
+        interval: recurrence.interval,
+        intervalNumber: recurrence.intervalNumber,
+        weekSunday: recurrence.weekSunday,
+        weekMonday: recurrence.weekMonday,
+        weekTuesday: recurrence.weekTuesday,
+        weekWednesday: recurrence.weekWednesday,
+        weekThursday: recurrence.weekThursday,
+        weekFriday: recurrence.weekFriday,
+        weekSaturday: recurrence.weekSaturday,
+        monthOrdinal: recurrence.monthOrdinal,
+        monthWeekday: recurrence.monthWeekday,
+        stopType: recurrence.stopType,
+        stopDate: recurrence.stopDate,
+        stopNumber: recurrence.stopNumber,
     };
 
     const yamlString = yaml.dump({ 'joplin-recurrence': recurrenceData }, { indent: 2 });
+
     let newBody: string;
 
-    if (this.extractFrontmatter(originalBody)) {
-      newBody = originalBody.replace(/^---\s*\n([\s\S]*?)\n---\s*\n/, `---\n${yamlString}\n---\n`);
-    } else {
-      newBody = `---\n${yamlString}\n---\n\n${originalBody}`;
+    const existingFrontmatter = await this.extractFrontmatter(originalBody);
+    if (existingFrontmatter === null) {
+            newBody = `---\n${yamlString}\n---\n\n${originalBody}`;
     }
+    else
+    {
+            newBody = originalBody.replace(/^---\s*\n([\s\S]*?)\n---\s*\n/, `---\n${yamlString}\n---\n`);
 
+    }
+    
+    // Save the updated note
     await joplin.data.put(['notes', id], null, { body: newBody });
     return newBody;
   }
@@ -87,11 +92,11 @@ export class Database {
   @Trace()
   /** Create a new recurrence record */
   @TryCatch({ logError: true })
-  static async createRecord(id: string, recurrence: Recurrence): Promise<void> {
+  static async createRecord(id: string, recurrence: Recurrence) {
     const note = await joplin.data.get(['notes', id], { fields: ['body'] });
     const cleanedBody = note.body.replace(/^---\s*\n([\s\S]*?)\n---\s*\n/, '').trimStart();
     await joplin.data.put(['notes', id], null, { body: cleanedBody });
-
+    
     await this.injectFrontmatter(id, recurrence, note.body);
 
     const tagId = await this.findOrCreateTagId();
@@ -103,7 +108,7 @@ export class Database {
   @Trace()
   /** Get all recurrence records (only todos with due date and "recurring" tag) */
   @TryCatch({ logError: true, fallback: [] })
-  static async getAllRecords(): Promise<any[]> {
+  static async getAllRecords() {
     const tagId = await this.findOrCreateTagId();
     if (!tagId) return [];
 
@@ -116,7 +121,7 @@ export class Database {
     const results: any[] = [];
 
     for (const note of notes) {
-      const data = this.extractFrontmatter(note.body);
+      const data = await this.extractFrontmatter(note.body);
       if (data) {
         results.push({ ...note, recurrence: this.toRecurrence(data) });
       } else {
@@ -132,40 +137,56 @@ export class Database {
   /** Get recurrence for a specific note */
   @TryCatch({ logError: true, fallback: new Recurrence() })
   static async getRecord(id: string): Promise<Recurrence> {
+    // Fetch note's tags with id and title
+    const currentTagsResponse = await joplin.data.get(['notes', id, 'tags'], { fields: ['id', 'title'] });
+    
+    // Safely extract and map to array of { id, title } objects
+    const currentTags = (currentTagsResponse?.items || []).map(tag => ({
+        id: tag.id,
+        title: tag.title
+    }));
+
     const note = await joplin.data.get(['notes', id], { fields: ['body'] });
-    const tagsResponse = await joplin.data.get(['notes', id, 'tags'], { fields: ['title'] });
-    const hasRecurringTag = (tagsResponse?.items || []).some((t: any) => t.title === this.TAG_NAME);
 
-    const data = this.extractFrontmatter(note.body);
-
-    if (!hasRecurringTag || !data) {
-      await this.createRecord(id, new Recurrence());
-      return new Recurrence();
+    if (!currentTags.some(tag => tag.title === "recurring")) {
+        this.createRecord(id, new Recurrence());
     }
-
-    return this.toRecurrence(data);
+    const recurrenceData = await this.extractFrontmatter(note.body);
+    if (!recurrenceData) {
+        console.warn("No recurrence data found; deleting and recreate record.");
+        this.deleteRecord(id);
+        this.createRecord(id, new Recurrence());
+    }
+    return this.toRecurrence(recurrenceData);
   }
 
   @Trace()
   /** Update recurrence record */
   @TryCatch({ logError: true })
-  static async updateRecord(id: string, recurrence: Recurrence): Promise<void> {
-    const tagsResponse = await joplin.data.get(['notes', id, 'tags'], { fields: ['title'] });
-    const hasRecurringTag = (tagsResponse?.items || []).some((t: any) => t.title === this.TAG_NAME);
+  static async updateRecord(id: string, recurrence: Recurrence) {
+   // Fetch note's tags with id and title
+    const currentTagsResponse = await joplin.data.get(['notes', id, 'tags'], { fields: ['id', 'title'] });
 
-    if (!hasRecurringTag) {
-      const tagId = await this.findOrCreateTagId();
-      if (tagId) await joplin.data.post(['tags', tagId, 'notes'], null, { id });
+    // Safely extract and map to array of { id, title } objects
+    const currentTags = (currentTagsResponse?.items || []).map(tag => ({
+        id: tag.id,
+        title: tag.title
+    }));
+    if (!currentTags.some(tag => tag.title === "recurring")) {
+        let tag_id = await this.findOrCreateTagId();
+        await joplin.data.post(['tags', tag_id, 'notes'], null, { id: id });
     }
+    else {
+        const note = await joplin.data.get(['notes', id], { fields: ['body'] });
 
-    const note = await joplin.data.get(['notes', id], { fields: ['body'] });
-    await this.injectFrontmatter(id, recurrence, note.body);
+        await this.injectFrontmatter(id, recurrence, note.body);
+    }
   }
 
   @Trace()
   /** Delete recurrence record */
   @TryCatch({ logError: true })
-  static async deleteRecord(id: string): Promise<void> {
+  static async deleteRecord(id: string) {
     const note = await joplin.data.get(['notes', id], { fields: ['body'] });
     const cleanedBody = note.body.replace(/^---\s*\n([\s\S]*?)\n---\s*\n/, '').trimStart();
     await joplin.data.put(['notes', id], null, { body: cleanedBody });
@@ -182,25 +203,30 @@ export class Database {
 
   /** Convert YAML object → Recurrence instance */
   private static toRecurrence(record: any): Recurrence {
-    const r = new Recurrence();
-    if (!record) return r;
-
-    r.enabled = record.enabled ?? false;
-    r.interval = record.interval ?? '';
-    r.intervalNumber = record.intervalNumber ?? 1;
-    r.weekSunday = record.weekSunday ?? false;
-    r.weekMonday = record.weekMonday ?? false;
-    r.weekTuesday = record.weekTuesday ?? false;
-    r.weekWednesday = record.weekWednesday ?? false;
-    r.weekThursday = record.weekThursday ?? false;
-    r.weekFriday = record.weekFriday ?? false;
-    r.weekSaturday = record.weekSaturday ?? false;
-    r.monthOrdinal = record.monthOrdinal ?? '';
-    r.monthWeekday = record.monthWeekday ?? '';
-    r.stopType = record.stopType ?? '';
-    r.stopDate = record.stopDate ?? '';
-    r.stopNumber = record.stopNumber ?? 0;
-
-    return r;
-  }
+    
+    const recurrence = new Recurrence();
+    if (!record) 
+        {
+        return recurrence;
+        }
+    else
+    {
+    recurrence.enabled = record.enabled ?? false;
+    recurrence.interval = record.interval ?? '';
+    recurrence.intervalNumber = record.intervalNumber ?? 1;
+    recurrence.weekSunday = record.weekSunday ?? false;
+    recurrence.weekMonday = record.weekMonday ?? false;
+    recurrence.weekTuesday = record.weekTuesday ?? false;
+    recurrence.weekWednesday = record.weekWednesday ?? false;
+    recurrence.weekThursday = record.weekThursday ?? false;
+    recurrence.weekFriday = record.weekFriday ?? false;
+    recurrence.weekSaturday = record.weekSaturday ?? false;
+    recurrence.monthOrdinal = record.monthOrdinal ?? '';
+    recurrence.monthWeekday = record.monthWeekday ?? '';
+    recurrence.stopType = record.stopType ?? '';
+    recurrence.stopDate = record.stopDate ?? '';
+    recurrence.stopNumber = record.stopNumber ?? 0;
+    }
+    return recurrence;
+}
 }
