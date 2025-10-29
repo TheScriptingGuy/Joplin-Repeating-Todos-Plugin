@@ -164,23 +164,16 @@ export class Database {
   /** Update recurrence record */
   @TryCatch({ logError: true })
   static async updateRecord(id: string, recurrence: Recurrence) {
-   // Fetch note's tags with id and title
-    const currentTagsResponse = await joplin.data.get(['notes', id, 'tags'], { fields: ['id', 'title'] });
+    const tagsResponse = await joplin.data.get(['notes', id, 'tags'], { fields: ['title'] });
+    const hasRecurringTag = (tagsResponse?.items || []).some((t: any) => t.title === this.TAG_NAME);
 
-    // Safely extract and map to array of { id, title } objects
-    const currentTags = (currentTagsResponse?.items || []).map(tag => ({
-        id: tag.id,
-        title: tag.title
-    }));
-    if (!currentTags.some(tag => tag.title === "recurring")) {
-        let tag_id = await this.findOrCreateTagId();
-        await joplin.data.post(['tags', tag_id, 'notes'], null, { id: id });
+    if (!hasRecurringTag) {
+      const tagId = await this.findOrCreateTagId();
+      if (tagId) await joplin.data.post(['tags', tagId, 'notes'], null, { id });
     }
-    else {
-        const note = await joplin.data.get(['notes', id], { fields: ['body'] });
 
-        await this.injectFrontmatter(id, recurrence, note.body);
-    }
+    const note = await joplin.data.get(['notes', id], { fields: ['body'] });
+    await this.injectFrontmatter(id, recurrence, note.body);
   }
 
   @Trace()
