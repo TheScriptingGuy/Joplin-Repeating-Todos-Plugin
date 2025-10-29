@@ -1,40 +1,56 @@
-import joplin from "api";
-import { updateAllRecurrences } from "./recurrence";
+import joplin from 'api';
+import { RecurrenceManager } from './recurrence';
+import { TryCatch } from './decorators';
 
-let repeatingTimerId: NodeJS.Timeout | null = null;  // To store the timer ID for cleanup
+export class TimerManager {
+  private static timerId: NodeJS.Timeout | null = null;
+  private static readonly DEFAULT_INTERVAL_SECONDS = 60;
 
-export async function setupTimer(){
-    await updateAllRecurrences()
-    joplin.workspace.onNoteSelectionChange(async (event:any) => {
-        //const note = await joplin.data.get(['notes', event.noteId]);
-        //console.info('Alarm was triggered for note: ', note);
-        updateAllRecurrences()
-        // Set up the repeating timer: Runs every X seconds (from settings)
-        const setupRepeatingTimer = async () => {
-            if (repeatingTimerId) {
-                clearInterval(repeatingTimerId);  // Clear any existing to avoid duplicates
-            }
+  /** Start the recurring update loop */
+  @TryCatch({ logError: true })
+  static async start(): Promise<void> {
+    await this.stop(); // Ensure no duplicate timers
 
-            const intervalSeconds = await joplin.settings.value('updateFrequency') || 60;  // Default 60s if not set
-            console.info(`Setting up repeating timer with interval: ${intervalSeconds} seconds`);
-            const intervalMs = intervalSeconds * 1000;  // Convert to milliseconds
+    // Run once immediately
+    await RecurrenceManager.updateAllRecurrences();
 
-            repeatingTimerId = setInterval(async () => {
-                console.info(`Repeating timer fired - Interval: ${intervalSeconds}s`);
-                try {
-                    await updateAllRecurrences();
-                    // Optional: Log success or show subtle feedback
-                } catch (error) {
-                    console.error('Repeating timer update failed:', error);
-                }
-            }, intervalMs);
-
-            console.info(`Repeating timer started: every ${intervalSeconds} seconds`);
-        };
-
-        // Initial call to set it up
-        await setupRepeatingTimer();
+    // Listen to note selection changes
+    joplin.workspace.onNoteSelectionChange(async () => {
+      await RecurrenceManager.updateAllRecurrences();
     });
-    //clearInterval(timer)
-    //timer = setInterval(updateAllRecurrences, await joplin.settings.value("updateFrequency") * 1000);
+
+    // Start repeating timer
+    await this.setupRepeatingTimer();
+  }
+
+  /** Stop the timer and clean up */
+  @TryCatch({ logError: true })
+  static async stop(): Promise<void> {
+    if (this.timerId) {
+      clearInterval(this.timerId);
+      this.timerId = null;
+      console.info('Repeating timer stopped.');
+    }
+  }
+
+  /** Internal: Set up the interval based on settings */
+  @TryCatch({ logError: true })
+  private static async setupRepeatingTimer(): Promise<void> {
+    const intervalSeconds =
+      (await joplin.settings.value('updateFrequency')) ||
+      this.DEFAULT_INTERVAL_SECONDS;
+
+    const intervalMs = intervalSeconds * 1000;
+
+    console.info(`Starting repeating timer: every ${intervalSeconds}s`);
+
+    this.timerId = setInterval(async () => {
+      console.info(`Timer fired (${intervalSeconds}s interval)`);
+      try {
+        await RecurrenceManager.updateAllRecurrences();
+      } catch (error) {
+        console.error('Timer update failed:', error);
+      }
+    }, intervalMs);
+  }
 }

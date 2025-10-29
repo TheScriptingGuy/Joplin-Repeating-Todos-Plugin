@@ -1,37 +1,45 @@
 /** README ******************************************************************************************************************************************
- * This file contains all functions involved in managing the recurrence data.                                                                      *
- * Recurrence data is stored directly in the todo note's body as YAML frontmatter for full cross-platform compatibility (desktop and mobile).      *
- * Each recurrence corresponds with the note/task id in Joplin which it affects.                                                                   *
+ * This file contains all functions involved in managing the recurrence data.
+ * Recurrence data is stored directly in the todo note's body as YAML frontmatter for full cross-platform compatibility (desktop and mobile).
+ * Each recurrence corresponds with the note/task id in Joplin which it affects.
  ***************************************************************************************************************************************************/
 
-/** Imports ****************************************************************************************************************************************/
 import joplin from "api";
 import { Recurrence } from "../model/recurrence";
 import yaml from 'js-yaml';
+import { Trace, TryCatch } from "./decorators";
 
-/** setupDatabase ***********************************************************************************************************************************
- * No setup required for note-based storage—this is a no-op. Call it at program start if needed for consistency.                                    *
- ***************************************************************************************************************************************************/
-export async function setupDatabase() {
-    console.log('Recurrence storage initialized (note-based mode).');
-}
+/**
+ * Database class for managing recurrence data in Joplin notes.
+ * Uses YAML frontmatter in note body + "recurring" tag.
+ */
 
-/** Helper: Extract YAML frontmatter from note body ***************************************************************************************/
-function extractFrontmatter(body: string): any | null {
+export class Database {
+  private static readonly TAG_NAME = "recurring";
+
+  /** No setup required for note-based storage */
+  static async setupDatabase() {
+    console.info('Recurrence storage initialized (note-based mode).');
+  }
+
+  @Trace()
+  /** Helper: Extract YAML frontmatter from note body */
+  private static async extractFrontmatter(body: string): Promise<any | null> {
     if (!body) return null;
-    const frontmatterMatch = body.match(/^---\s*\n([\s\S]*?)\n---\s*\n/);
-    if (!frontmatterMatch) return null;
+    const match = body.match(/^---\s*\n([\s\S]*?)\n---\s*\n/);
+    if (!match) return null;
     try {
-        const frontmatter = yaml.load(frontmatterMatch[1]);
-        return frontmatter['joplin-recurrence'] || null;
-    } catch (e) {
-        console.error('Failed to parse YAML frontmatter:', e.message);
+        const data = yaml.load(match[1]);
+        return data?.['joplin-recurrence'] ?? null;
+    } catch {
         return null;
     }
-}
+  }
 
-/** Helper: Inject or update YAML frontmatter in note body ******************************************************************************/
-async function injectFrontmatter(id: string, recurrence: Recurrence, originalBody: string): Promise<string> {
+  @Trace()
+  /** Helper: Inject or update YAML frontmatter */
+  @TryCatch({ logError: true })
+  private static async injectFrontmatter(id: string, recurrence: Recurrence, originalBody: string): Promise<string> {
     const recurrenceData = {
         enabled: recurrence.enabled,
         interval: recurrence.interval,
@@ -53,95 +61,82 @@ async function injectFrontmatter(id: string, recurrence: Recurrence, originalBod
     const yamlString = yaml.dump({ 'joplin-recurrence': recurrenceData }, { indent: 2 });
 
     let newBody: string;
-    const existingFrontmatter = extractFrontmatter(originalBody);
 
-
-    if (existingFrontmatter) {
-        // Update existing
-        newBody = originalBody.replace(/^---\s*\n([\s\S]*?)\n---\s*\n/, `---\n${yamlString}\n---\n`);
-
-    } else {
-        // Prepend new frontmatter
-        newBody = `---\n${yamlString}\n---\n\n${originalBody}`;
+    const existingFrontmatter = await this.extractFrontmatter(originalBody);
+    if (existingFrontmatter === null) {
+            newBody = `---\n${yamlString}\n---\n\n${originalBody}`;
+    }
+    else
+    {
+            newBody = originalBody.replace(/^---\s*\n([\s\S]*?)\n---\s*\n/, `---\n${yamlString}\n---\n`);
 
     }
+    
     // Save the updated note
     await joplin.data.put(['notes', id], null, { body: newBody });
     return newBody;
-}
+  }
 
+  @Trace()
+  /** Find or create the "recurring" tag */
+  @TryCatch({ logError: true, fallback: null })
+  private static async findOrCreateTagId(): Promise<string | null> {
+    const allTags = await joplin.data.get(['tags'], { fields: ['id', 'title'] });
+    const matchingTag = (allTags?.items || []).find((tag: any) => tag.title === this.TAG_NAME);
+    if (matchingTag) return matchingTag.id;
 
+    const newTag = await joplin.data.post(['tags'], null, { title: this.TAG_NAME });
+    return newTag.id;
+  }
 
-/**
- * Helper: Finds a tag ID by title.
- * @param tagTitle - The tag title to search for.
- * @returns The tag ID if found, null otherwise.
- */
-async function findTagIdByTitle(tagTitle: string): Promise<string> {
-  const allTags = await joplin.data.get(['tags'], { fields: ['id', 'title'] });
-  const matchingTag = (allTags?.items || []).find((tag: { id: string; title: string }) => tag.title === tagTitle);
-  let tag_id = matchingTag ? matchingTag.id : null;  
-  if (!tag_id) {
-        // Create the tag if it doesn't exist
-        const newTag = await joplin.data.post(['tags'], null, { title: "recurring" });
-        tag_id = newTag.id;
-    }
-  return tag_id;
-}
-/** createRecord ************************************************************************************************************************************
- * Creates a new recurrence record when given the noteID and recurrence data object.                                                               *
- * Injects into the note body as YAML frontmatter.                                                                                                 *
- ***************************************************************************************************************************************************/
-export async function createRecord(id: string, recurrence: Recurrence) {
-    // Fetch note body
-    const note = await joplin.data.get(['notes', id], { fields: ['body', 'todo_due'] });
-
+  @Trace()
+  /** Create a new recurrence record */
+  @TryCatch({ logError: true })
+  static async createRecord(id: string, recurrence: Recurrence) {
+    const note = await joplin.data.get(['notes', id], { fields: ['body'] });
     const cleanedBody = note.body.replace(/^---\s*\n([\s\S]*?)\n---\s*\n/, '').trimStart();
-        
-    await joplin.data.put(['notes',id], null, {body : cleanedBody} );
-
-
-    await injectFrontmatter(id, recurrence, note.body);
-
-    let tag_id = await findTagIdByTitle("recurring");
-
-    // Associate the tag with the note (correct path: tags/{tag_id}/notes)
-    await joplin.data.post(['tags', tag_id, 'notes'], null, { id: id });
-}
-
-/** getAllRecords ***********************************************************************************************************************************
- * Gets all recurrence records by fetching all todo notes and parsing their bodies.                                                                *
- ***************************************************************************************************************************************************/
-export async function getAllRecords() {
-    let tag_id = await findTagIdByTitle("recurring");
+    await joplin.data.put(['notes', id], null, { body: cleanedBody });
     
-    const notesResponse = await joplin.data.get(['tags', tag_id, 'notes'], {
-        where: 'is_todo = 1 and todo_due != 0',
-        fields: ['id', 'body', 'title', 'is_todo', 'todo_due','todo_completed'] 
+    await this.injectFrontmatter(id, recurrence, note.body);
+
+    const tagId = await this.findOrCreateTagId();
+    if (tagId) {
+      await joplin.data.post(['tags', tagId, 'notes'], null, { id });
+    }
+  }
+
+  @Trace()
+  /** Get all recurrence records (only todos with due date and "recurring" tag) */
+  @TryCatch({ logError: true, fallback: [] })
+  static async getAllRecords() {
+    const tagId = await this.findOrCreateTagId();
+    if (!tagId) return [];
+
+    const response = await joplin.data.get(['tags', tagId, 'notes'], {
+      where: 'is_todo = 1 AND todo_due != 0',
+      fields: ['id', 'body', 'title', 'is_todo', 'todo_due', 'todo_completed']
     });
-    const allTagNotes = notesResponse?.items || [];
 
-    const filteredNotes = allTagNotes.filter(note => note.is_todo === 1 && note.todo_due != 0);
+    const notes = (response?.items || []).filter((note: any) => note.is_todo === 1 && note.todo_due !== 0);
+    const results: any[] = [];
 
-    const results = [];
-    for (const note of filteredNotes) {
-        const recurrenceData = extractFrontmatter(note.body);
-        if (recurrenceData) {
-            results.push(note);
-        }
-        if (!recurrenceData) {
-            console.error(`No recurrence data found for note ID ${note.id}; skipping.`);
-            deleteRecord(note.id);
-        }
-        
+    for (const note of notes) {
+      const data = await this.extractFrontmatter(note.body);
+      if (data) {
+        results.push({ ...note, recurrence: this.toRecurrence(data) });
+      } else {
+        console.warn(`No recurrence data for note ${note.id}; removing tag.`);
+        await this.deleteRecord(note.id);
+      }
     }
+
     return results;
-}
+  }
 
-/** getRecord ***************************************************************************************************************************************
- * Gets recurrence record for the corresponding note ID                                                                                            *
- ***************************************************************************************************************************************************/
-export async function getRecord(id: string): Promise<Recurrence> {
+  @Trace()
+  /** Get recurrence for a specific note */
+  @TryCatch({ logError: true, fallback: new Recurrence() })
+  static async getRecord(id: string): Promise<Recurrence> {
     // Fetch note's tags with id and title
     const currentTagsResponse = await joplin.data.get(['notes', id, 'tags'], { fields: ['id', 'title'] });
     
@@ -154,62 +149,55 @@ export async function getRecord(id: string): Promise<Recurrence> {
     const note = await joplin.data.get(['notes', id], { fields: ['body'] });
 
     if (!currentTags.some(tag => tag.title === "recurring")) {
-        createRecord(id, new Recurrence());
+        this.createRecord(id, new Recurrence());
     }
-    const recurrenceData = extractFrontmatter(note.body);
+    const recurrenceData = await this.extractFrontmatter(note.body);
     if (!recurrenceData) {
-        console.error("No recurrence data found; deleting and recreate record.");
-        deleteRecord(id);
-        createRecord(id, new Recurrence());
+        console.warn("No recurrence data found; deleting and recreate record.");
+        this.deleteRecord(id);
+        this.createRecord(id, new Recurrence());
     }
-    return getRecordAsRecurrence(recurrenceData);
-}
+    return this.toRecurrence(recurrenceData);
+  }
 
-/** updateRecord ************************************************************************************************************************************
- * Updates a recurrence record when given the noteID and recurrence data object                                                                    *
- ***************************************************************************************************************************************************/
-export async function updateRecord(id: string, recurrence: Recurrence) {
-    // Fetch note's tags with id and title
-    const currentTagsResponse = await joplin.data.get(['notes', id, 'tags'], { fields: ['id', 'title'] });
+  @Trace()
+  /** Update recurrence record */
+  @TryCatch({ logError: true })
+  static async updateRecord(id: string, recurrence: Recurrence) {
+    const tagsResponse = await joplin.data.get(['notes', id, 'tags'], { fields: ['title'] });
+    const hasRecurringTag = (tagsResponse?.items || []).some((t: any) => t.title === this.TAG_NAME);
 
-    // Safely extract and map to array of { id, title } objects
-    const currentTags = (currentTagsResponse?.items || []).map(tag => ({
-        id: tag.id,
-        title: tag.title
-    }));
-    if (!currentTags.some(tag => tag.title === "recurring")) {
-        let tag_id = await findTagIdByTitle("recurring");
-        await joplin.data.post(['tags', tag_id, 'notes'], null, { id: id });
+    if (!hasRecurringTag) {
+      const tagId = await this.findOrCreateTagId();
+      if (tagId) await joplin.data.post(['tags', tagId, 'notes'], null, { id });
     }
-    else {
-        const note = await joplin.data.get(['notes', id], { fields: ['body'] });
 
-        await injectFrontmatter(id, recurrence, note.body);
-    }
-    
-}
-
-/** deleteRecord ************************************************************************************************************************************
- * Deletes a recurrence record for the corresponding note ID.                                                                                      *
- ***************************************************************************************************************************************************/
-export async function deleteRecord(id: string) {
-    // Remove frontmatter from note body
     const note = await joplin.data.get(['notes', id], { fields: ['body'] });
-    
+    await this.injectFrontmatter(id, recurrence, note.body);
+  }
+
+  @Trace()
+  /** Delete recurrence record */
+  @TryCatch({ logError: true })
+  static async deleteRecord(id: string) {
+    const note = await joplin.data.get(['notes', id], { fields: ['body'] });
     const cleanedBody = note.body.replace(/^---\s*\n([\s\S]*?)\n---\s*\n/, '').trimStart();
-    let tag_id = await findTagIdByTitle("recurring")
-    await joplin.data.put(['notes',id], null, { body: cleanedBody });
+    await joplin.data.put(['notes', id], null, { body: cleanedBody });
 
-    await joplin.data.delete(['tags', tag_id, 'notes', id]);
-}
+    const tagId = await this.findOrCreateTagId();
+    if (tagId) {
+      try {
+        await joplin.data.delete(['tags', tagId, 'notes', id]);
+      } catch (e) {
+        // Ignore if already removed
+      }
+    }
+  }
 
-/** convertRecordToRecurrence ***********************************************************************************************************************
- * Converts a plain object from YAML output to a recurrence object                                                                                *
- ***************************************************************************************************************************************************/
-function getRecordAsRecurrence(record: any): Recurrence{
-
+  /** Convert YAML object → Recurrence instance */
+  private static toRecurrence(record: any): Recurrence {
+    
     const recurrence = new Recurrence();
-
     if (!record) 
         {
         return recurrence;
@@ -233,4 +221,5 @@ function getRecordAsRecurrence(record: any): Recurrence{
     recurrence.stopNumber = record.stopNumber ?? 0;
     }
     return recurrence;
+}
 }

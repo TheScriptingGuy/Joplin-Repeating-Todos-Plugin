@@ -1,34 +1,47 @@
-/** Imports ****************************************************************************************************************************************/
-import joplin from "api";
-import { openRecurrenceDialog, setOverdueTodosToToday, updateAllRecurrences, updateOverdueTodos } from "./recurrence";
+import joplin from 'api';
+import { RecurrenceManager } from './recurrence';
+import { TryCatch } from './decorators';
 
-/** setupCommands ***********************************************************************************************************************************
- * Sets up all commands used by toolbar buttons and menu items                                                                                      *
- ***************************************************************************************************************************************************/
-export async function setupCommands(){
-    await joplin.commands.register({
+/**
+ * Registers all Joplin commands for toolbar buttons and menu items.
+ */
+export class CommandManager {
+  private static readonly ICON = 'fas fa-redo-alt';
+
+  /** Register all plugin commands */
+  @TryCatch({ logError: true })
+  static async registerAll(): Promise<void> {
+    const commands = [
+      {
         name: 'updateAllRecurrences',
         label: 'Update All Recurrence Information',
-        iconName: 'fas fa-redo-alt',
-        execute: updateAllRecurrences
-    })
-    await joplin.commands.register({
+        execute: () => RecurrenceManager.updateAllRecurrences(),
+      },
+      {
         name: 'updateOverdueTodos',
         label: 'Update Overdue To-Dos',
-        iconName: 'fas fa-redo-alt',
-        execute: updateOverdueTodos
-    })
-    await joplin.commands.register({
+        execute: () => RecurrenceManager.updateOverdueTodos(),
+      },
+      {
         name: 'setOverdueTodosToToday',
         label: 'Reschedule Overdue To-Dos to Today',
-        iconName: 'fas fa-redo-alt',
-        execute: setOverdueTodosToToday
-    })
-
-    await joplin.commands.register({
+        execute: () => RecurrenceManager.setOverdueTodosToToday(),
+      },
+      {
         name: 'openRecurrenceDialog',
         label: 'Open Recurrence Dialog',
-        iconName: 'fas fa-redo-alt',
-        execute: openRecurrenceDialog
-    })
+        execute: () => RecurrenceManager.openRecurrenceDialog(),
+      },
+    ];
+
+    for (const cmd of commands) {
+      await joplin.commands.register({
+        ...cmd,
+        iconName: this.ICON,
+      });
+      console.info(`Command registered: ${cmd.name}`);
+    }
+
+    console.info('All commands registered.');
+  }
 }
