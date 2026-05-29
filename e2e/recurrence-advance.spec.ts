@@ -54,4 +54,30 @@ test.describe('Recurrence advancement', () => {
       .poll(async () => readAlarm(win), { timeout: 15_000, intervals: [1000] })
       .toBe(EXPECTED);
   });
+
+  test('completing an OVERDUE (past-alarm) recurring to-do advances by one interval, not to today', async () => {
+    const { win } = joplin;
+    await createTodo(win, 'Overdue Todo ' + Date.now());
+
+    // Alarm well in the past — the "overdue" path.
+    const ORIGINAL = '2020-03-10T08:00';
+    const EXPECTED = '2020-03-11T08:00';
+
+    await setAlarm(win, ORIGINAL);
+    await setRecurrence(win, { enabled: true, interval: 'day' });
+    expect(await readAlarm(win)).toBe(ORIGINAL);
+
+    await completeTodo(win);
+
+    // Plugin re-opens the to-do (completion-driven advancement runs regardless of past/future).
+    await expect
+      .poll(async () => isTodoComplete(win), { timeout: 15_000, intervals: [500] })
+      .toBe(false);
+
+    // The alarm advances by exactly one interval from the stored due date — it is NOT rescheduled
+    // to "today" (that only happens via the manual "Reschedule overdue to-dos" command).
+    await expect
+      .poll(async () => readAlarm(win), { timeout: 15_000, intervals: [1000] })
+      .toBe(EXPECTED);
+  });
 });
