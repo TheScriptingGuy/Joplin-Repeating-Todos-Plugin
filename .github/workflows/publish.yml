@@ -25,19 +25,21 @@ jobs:
           # Writes an .npmrc pointing at the public registry and wires NODE_AUTH_TOKEN for auth.
           registry-url: 'https://registry.npmjs.org'
 
-      # On a Release, ensure the tag (e.g. v1.2.0) matches package.json version (1.2.0) so we never
-      # publish a mismatched version. Skipped for manual workflow_dispatch runs (no tag).
-      - name: Verify release tag matches package.json version
-        if: github.event_name == 'release'
+      # Resolve the version to publish: on a Release, take it from the tag (e.g. v1.2.0 -> 1.2.0)
+      # and write it into package.json; otherwise (manual workflow_dispatch) keep package.json as-is.
+      - name: Resolve npm package version
         run: |
-          PKG_VERSION="$(node -p "require('./package.json').version")"
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          echo "package.json version: $PKG_VERSION"
-          echo "release tag version:  $TAG_VERSION (from $GITHUB_REF_NAME)"
-          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
-            echo "::error::Release tag ($GITHUB_REF_NAME) does not match package.json version ($PKG_VERSION)."
-            exit 1
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            echo "Using release tag version: $VERSION (from $GITHUB_REF_NAME)"
+            # --no-git-tag-version: just edit package.json, no commit/tag.
+            # --allow-same-version: don't fail if the tag already equals package.json.
+            npm version "$VERSION" --no-git-tag-version --allow-same-version
+          else
+            VERSION="$(node -p "require('./package.json').version")"
+            echo "No release tag (event=${{ github.event_name }}); using package.json version: $VERSION"
           fi
+          echo "PUBLISH_VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - run: npm ci
 
@@ -51,6 +53,8 @@ jobs:
       # via the "prepare" hook since we just built above. Drop "--provenance" if your npm token type
       # or registry settings don't support it.
       - name: Publish to npm
-        run: npm publish --provenance --ignore-scripts
+        run: |
+          echo "Publishing $(node -p "require('./package.json').name")@$PUBLISH_VERSION"
+          npm publish --provenance --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
