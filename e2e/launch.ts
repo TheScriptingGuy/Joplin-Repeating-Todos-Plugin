@@ -50,21 +50,21 @@ export function assertE2EReady(): void {
   }
 }
 
-/** Create a fresh, isolated Joplin profile that loads this plugin from ./dist as a dev plugin. */
-function createProfile(): string {
+/** Create a fresh, isolated Joplin profile. Loads this plugin from ./dist unless loadPlugin=false. */
+function createProfile(loadPlugin: boolean): string {
   const profilesRoot = path.join(REPO_ROOT, 'e2e', '.profiles');
   fs.mkdirSync(profilesRoot, { recursive: true });
   const profileDir = fs.mkdtempSync(path.join(profilesRoot, 'profile-'));
 
   // File-storage settings live in <profile>/settings.json. `plugins.devPluginPaths` is a
   // File-storage setting, so presetting it makes Joplin load our built plugin (./dist) on startup.
-  const settings = {
-    'plugins.devPluginPaths': PLUGIN_DIST,
+  const settings: Record<string, unknown> = {
     'welcome.enabled': false,
     'autoUpdateEnabled': false,
     'locale': 'en_GB',
     'sync.target': 0,
   };
+  if (loadPlugin) settings['plugins.devPluginPaths'] = PLUGIN_DIST;
   fs.writeFileSync(
     path.join(profileDir, 'settings.json'),
     JSON.stringify(settings, null, 2),
@@ -104,9 +104,10 @@ function waitForCDP(port: number, timeoutMs: number): Promise<void> {
 }
 
 /** Launch Joplin and return the app + main window once the UI is ready. */
-export async function launchJoplin(): Promise<JoplinInstance> {
+export async function launchJoplin(opts: { loadPlugin?: boolean } = {}): Promise<JoplinInstance> {
+  const { loadPlugin = true } = opts;
   assertE2EReady();
-  const profileDir = createProfile();
+  const profileDir = createProfile(loadPlugin);
   const port = await getFreePort();
 
   const child = spawn(
