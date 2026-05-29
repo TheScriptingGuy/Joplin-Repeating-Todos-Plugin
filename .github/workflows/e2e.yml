@@ -1,0 +1,71 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # Fast unit / integration tests (Jest). Gate the heavier E2E job on these passing.
+  unit:
+    name: Unit & integration (Jest)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  # Real-app E2E: launches the actual Joplin desktop (Electron) under Xvfb with the plugin loaded.
+  e2e:
+    name: Real-app E2E (Playwright + Joplin desktop)
+    needs: unit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      # Must be >= the plugin's manifest app_min_version. Keep in sync with scripts/setup-e2e.sh.
+      JOPLIN_E2E_VERSION: 3.6.14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # Electron is Chromium under the hood, so Playwright's chromium host deps cover Joplin too.
+      # Also install Xvfb for the virtual display the GUI requires.
+      - name: Install Electron/Chromium system dependencies + Xvfb
+        run: |
+          sudo npx playwright install-deps chromium
+          sudo apt-get install -y xvfb
+
+      # Cache the downloaded Joplin AppImage so reruns skip the ~150 MB download.
+      # setup-e2e.sh re-extracts it (fast) when the squashfs-root is absent.
+      - name: Cache Joplin AppImage
+        uses: actions/cache@v4
+        with:
+          path: .e2e-cache/Joplin.AppImage
+          key: joplin-appimage-${{ env.JOPLIN_E2E_VERSION }}
+
+      # Builds the plugin (npm run dist), downloads + extracts Joplin (npm run setup:e2e),
+      # then runs the Playwright suite under a virtual display (xvfb-run).
+      - name: Run E2E tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report & traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore
