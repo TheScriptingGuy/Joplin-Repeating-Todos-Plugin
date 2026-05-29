@@ -1,3 +1,7 @@
 dist/
 node_modules/
 publish/
+.e2e-cache/
+test-results/
+playwright-report/
+e2e/.profiles/

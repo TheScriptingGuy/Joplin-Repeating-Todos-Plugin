@@ -38,28 +38,50 @@
 
 import { capitalize } from "../core/misc"
 
+/** RecurrenceData **********************************************************************************************************************************
+ * Plain-object shape of all the persisted recurrence fields. Used both for the JSON serialization contract that the dialog depends on and for the  *
+ * object (de)serialization used by the userData storage layer.                                                                                     *
+ ***************************************************************************************************************************************************/
+export interface RecurrenceData {
+    enabled: boolean
+    interval: string
+    intervalNumber: number
+    weekSunday: boolean
+    weekMonday: boolean
+    weekTuesday: boolean
+    weekWednesday: boolean
+    weekThursday: boolean
+    weekFriday: boolean
+    weekSaturday: boolean
+    monthOrdinal: string
+    monthWeekday: string
+    stopType: string
+    stopDate: string | null
+    stopNumber: number
+}
+
 export class Recurrence {
 
     /** Public Variables ***************************************************************************************************************************/
-    public enabled = false
-    public interval = 'minute'
-    public intervalNumber = 1
-    public weekSunday = false
-    public weekMonday = false
-    public weekTuesday = false
-    public weekWednesday = false
-    public weekThursday = false
-    public weekFriday = false
-    public weekSaturday = false
-    public monthOrdinal = 'first'
-    public monthWeekday = ''
-    public stopType = 'never'
-    public stopDate = null
-    public stopNumber = 1
+    public enabled: boolean = false
+    public interval: string = 'minute'
+    public intervalNumber: number = 1
+    public weekSunday: boolean = false
+    public weekMonday: boolean = false
+    public weekTuesday: boolean = false
+    public weekWednesday: boolean = false
+    public weekThursday: boolean = false
+    public weekFriday: boolean = false
+    public weekSaturday: boolean = false
+    public monthOrdinal: string = 'first'
+    public monthWeekday: string = ''
+    public stopType: string = 'never'
+    public stopDate: string | null = null
+    public stopNumber: number = 1
 
     /** Private Constants **************************************************************************************************************************/
-    private weekdayStrings = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
-    private monthOrdinalStrings = ['first', 'second', 'third', 'fourth', 'last']
+    private weekdayStrings: string[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
+    private monthOrdinalStrings: string[] = ['first', 'second', 'third', 'fourth', 'last']
 
     /** getString ***********************************************************************************************************************************
      * Returns a human readable string representing the recurrence.                                                                                 *
@@ -71,31 +93,31 @@ export class Recurrence {
      * Example 6: Every month on the first Wednesday                                                                                                *
      * Example 7: Never                                                                                                                             *
      ***********************************************************************************************************************************************/
-    public getString(){
-        var string = ""
+    public getString(): string {
+        let string = ""
         if (this.enabled) {
             if (this.intervalNumber == 1) {
                 string += `Every ${this.interval}`
             } else if (this.intervalNumber > 1) {
                 string += `Every ${this.intervalNumber} ${this.interval}s`
             }
-            if (this.interval == 'week'){
-                var weekArray = this.getWeekdaysInt().map((weekDay, _index, _array) => capitalize(this.weekdayStrings[weekDay]))
-                if (weekArray.length == 1){
+            if (this.interval == 'week') {
+                const weekArray = this.getWeekdaysInt().map((weekDay: number) => capitalize(this.weekdayStrings[weekDay]))
+                if (weekArray.length == 1) {
                     string += ` on ${weekArray.pop()}`
-                } else if (weekArray.length == 2){
+                } else if (weekArray.length == 2) {
                     string += ` on ${weekArray.shift()} and ${weekArray.shift()}`
-                } else if (weekArray.length > 2){
-                    var lastDay = weekArray.pop()
+                } else if (weekArray.length > 2) {
+                    const lastDay = weekArray.pop()
                     string += ` on ${weekArray.join(', ')} and ${lastDay}`
                 }
             } else if (this.interval == 'month' && this.monthOrdinal != '' && this.monthWeekday != '') {
-                string += ` on the ${this.monthOrdinal} ${capitalize(this.monthWeekday)}`;
+                string += ` on the ${this.monthOrdinal} ${capitalize(this.monthWeekday)}`
             }
         } else {
             string = "Never"
         }
-        return string;
+        return string
     }
 
     /** getNextDate *********************************************************************************************************************************
@@ -111,10 +133,11 @@ export class Recurrence {
      * If an nth weekday is set for a monthly recurrence, the method will find the nth weekday for the initial month and the next dates month       *
      * and then set the next date to the soonest weekday after the initial date.                                                                    *
      *                                                                                                                                              *
+     * Returns null if the recurrence is disabled.                                                                                                  *
      ***********************************************************************************************************************************************/
-    public getNextDate(initial){
-        if (this.enabled){
-            var next = new Date(initial.getTime());
+    public getNextDate(initial: Date): Date | null {
+        if (this.enabled) {
+            const next = new Date(initial.getTime())
             if (this.interval == 'minute') {
                 next.setMinutes(initial.getMinutes() + this.intervalNumber)
             } else if (this.interval == 'hour') {
@@ -123,11 +146,11 @@ export class Recurrence {
                 next.setDate(initial.getDate() + this.intervalNumber)
             } else if (this.interval == 'week') {
                 next.setDate(next.getDate() + this.intervalNumber * 7)
-                if (this.getWeekdaysInt().length > 0){
-                    var validWeekdays = this.getWeekdays(initial).concat(this.getWeekdays(next))
-                    validWeekdays.sort((a,b)=>{return a.getTime()-b.getTime()})
-                    for (var weekDate of validWeekdays){
-                        if (weekDate.getTime() > initial.getTime()){
+                if (this.getWeekdaysInt().length > 0) {
+                    const validWeekdays = this.getWeekdays(initial).concat(this.getWeekdays(next))
+                    validWeekdays.sort((a: Date, b: Date) => { return a.getTime() - b.getTime() })
+                    for (const weekDate of validWeekdays) {
+                        if (weekDate.getTime() > initial.getTime()) {
                             next.setTime(weekDate.getTime())
                             break
                         }
@@ -135,13 +158,13 @@ export class Recurrence {
                 }
             } else if (this.interval == 'month') {
                 next.setMonth(initial.getMonth() + this.intervalNumber)
-                if (this.monthOrdinal != "" && this.monthWeekday != ""){
-                    var initialDate = new Date(this.getMonthWeekday(initial))
-                    var nextDate = new Date(this.getMonthWeekday(next))
-                    var validMonthDates = [initialDate, nextDate]
-                    validMonthDates.sort((a,b)=>{return a.getTime()-b.getTime()})
-                    for (var monthDate of validMonthDates){
-                        if (monthDate > initial){
+                if (this.monthOrdinal != "" && this.monthWeekday != "") {
+                    const initialDate = new Date(this.getMonthWeekday(initial))
+                    const nextDate = new Date(this.getMonthWeekday(next))
+                    const validMonthDates = [initialDate, nextDate]
+                    validMonthDates.sort((a: Date, b: Date) => { return a.getTime() - b.getTime() })
+                    for (const monthDate of validMonthDates) {
+                        if (monthDate > initial) {
                             next.setTime(monthDate.getTime())
                             break
                         }
@@ -150,19 +173,33 @@ export class Recurrence {
             } else if (this.interval == 'year') {
                 next.setFullYear(initial.getFullYear() + this.intervalNumber)
             }
-            return next;
+            return next
         }
+        return null
     }
 
-    public getNextDateAfter(initial, after){
-        if (this.enabled){
-            var newDate = initial
-            console.log(`initial ${initial} after ${after}`)
-            while (newDate < after) {
-                newDate = this.getNextDate(newDate)
-                console.log(`newDate ${newDate}`)
-            }    
+    /** getNextDateAfter ****************************************************************************************************************************
+     * Starting from `initial`, repeatedly calls getNextDate until the result is strictly after `after`, then returns that Date.                    *
+     * Returns null if the recurrence is disabled, if getNextDate returns null, or if it fails to advance the date (guarding against infinite       *
+     * loops).                                                                                                                                      *
+     ***********************************************************************************************************************************************/
+    public getNextDateAfter(initial: Date, after: Date): Date | null {
+        if (!this.enabled) {
+            return null
         }
+        let current: Date = initial
+        while (current.getTime() <= after.getTime()) {
+            const next = this.getNextDate(current)
+            if (next === null) {
+                return null
+            }
+            // Guard against infinite loops: if the date fails to advance, bail out.
+            if (next.getTime() <= current.getTime()) {
+                return null
+            }
+            current = next
+        }
+        return current
     }
 
     /** updateStopStatus ****************************************************************************************************************************
@@ -171,11 +208,11 @@ export class Recurrence {
      * If the stop type is number and the number of recurrences is 1 or less, disable recurrence.                                                   *
      * If the stop type is number and the number of recurrences is greater than 1, subtract 1 from the recurrence.                                  *
      ***********************************************************************************************************************************************/
-    public updateStopStatus(){
-        if (this.stopType == 'date' && new Date(this.stopDate) < new Date()){
+    public updateStopStatus(): void {
+        if (this.stopType == 'date' && new Date(this.stopDate as string) < new Date()) {
             this.enabled = false
-        } else if (this.stopType == 'number'){
-            if (this.stopNumber <= 1){
+        } else if (this.stopType == 'number') {
+            if (this.stopNumber <= 1) {
                 this.enabled = false
             } else {
                 this.stopNumber = this.stopNumber - 1
@@ -186,51 +223,49 @@ export class Recurrence {
     /** getEnabledWeekdays **************************************************************************************************************************
      * Returns an array of all the enabled weekdays for the current week of a given date.                                                           *
      ***********************************************************************************************************************************************/
-    private getWeekdays(date){
-        return this.getWeekdaysInt().map((weekday) => {
-            var newDate = new Date(date)
+    private getWeekdays(date: Date): Date[] {
+        return this.getWeekdaysInt().map((weekday: number) => {
+            const newDate = new Date(date)
             newDate.setDate(newDate.getDate() - newDate.getDay() + weekday)
             return newDate
         })
     }
 
     /** getEnabledWeekdaysInt ***********************************************************************************************************************
-     * Returns an array of integers ranging from 0-6 representing the enabled days. 0=Mon, 1=Tue...5=Sat, 6=Sun                                     *
+     * Returns an array of integers ranging from 0-6 representing the enabled days. 0=Sun, 1=Mon...5=Fri, 6=Sat                                     *
      ***********************************************************************************************************************************************/
-
-     private getWeekdaysInt(){
-        var weekArray = []                                              // Create week array
-        if (this.weekSunday == true) {weekArray.push(0)}                // If sunday enabled add 0 to array
-        if (this.weekMonday == true) {weekArray.push(1)}                // If monday enabled add 1 to array
-        if (this.weekTuesday == true) {weekArray.push(2)}               // If tuesday enabled add 2 to array
-        if (this.weekWednesday == true) {weekArray.push(3)}             // If wednesday enabled, add 3 to array
-        if (this.weekThursday == true) {weekArray.push(4)}              // If thursday enabled add 4 to array
-        if (this.weekFriday == true) {weekArray.push(5)}                // If friday enabled add 5 to array
-        if (this.weekSaturday == true) {weekArray.push(6)}              // If saturday enabled add 6 to array
+    private getWeekdaysInt(): number[] {
+        const weekArray: number[] = []                                  // Create week array
+        if (this.weekSunday == true) { weekArray.push(0) }              // If sunday enabled add 0 to array
+        if (this.weekMonday == true) { weekArray.push(1) }              // If monday enabled add 1 to array
+        if (this.weekTuesday == true) { weekArray.push(2) }             // If tuesday enabled add 2 to array
+        if (this.weekWednesday == true) { weekArray.push(3) }           // If wednesday enabled, add 3 to array
+        if (this.weekThursday == true) { weekArray.push(4) }            // If thursday enabled add 4 to array
+        if (this.weekFriday == true) { weekArray.push(5) }              // If friday enabled add 5 to array
+        if (this.weekSaturday == true) { weekArray.push(6) }            // If saturday enabled add 6 to array
         return weekArray                                                // Return the array
-
-    } 
+    }
 
     /* getMonthWeekday ********************************************************************************************************************
         Gets the nth weekday of the month of the given date according to the monthOrdinal and monthWeekday variables
         It does this by compiling a list of matching weekdays in the given month, eg all the thursdays in this month
         Next it then gets the nth weekday of the list, determined by the monthOrdinal, eg. the second thursday of the month
     */
-    private getMonthWeekday(date: Date){
-        var ordinal = this.monthOrdinalStrings.indexOf(this.monthOrdinal)      // Get the month ordinal as integer    
-        var weekday = this.weekdayStrings.indexOf(this.monthWeekday)      // Get the month weekday as integer
-        var weekdays = [];                                              // Create array for matching weekdays
-        var startDate = new Date(date)                                  // Create a new date for manipulation
-        var currentMonth = startDate.getMonth()                         // Save the current month for while loop check
+    private getMonthWeekday(date: Date): Date {
+        const ordinal = this.monthOrdinalStrings.indexOf(this.monthOrdinal) // Get the month ordinal as integer
+        const weekday = this.weekdayStrings.indexOf(this.monthWeekday)      // Get the month weekday as integer
+        const weekdays: Date[] = []                                     // Create array for matching weekdays
+        const startDate = new Date(date)                                // Create a new date for manipulation
+        const currentMonth = startDate.getMonth()                       // Save the current month for while loop check
         startDate.setDate(1)                                            // Go to Beginning of the Week
         while (startDate.getMonth() === currentMonth) {                 // While still in current month...
-            if (startDate.getDay() == weekday){                         // If this day matches the month weekday...
-                weekdays.push(new Date(startDate));                     // Add this day to the weekday list
+            if (startDate.getDay() == weekday) {                        // If this day matches the month weekday...
+                weekdays.push(new Date(startDate))                      // Add this day to the weekday list
             }
-            startDate.setDate(startDate.getDate() + 1);                 // go to the next day
+            startDate.setDate(startDate.getDate() + 1)                  // go to the next day
         }
-        if (ordinal == 4){                                              // If month ordinal is last
-            return weekdays.pop()                                       // Return last weekday
+        if (ordinal == 4) {                                             // If month ordinal is last
+            return weekdays[weekdays.length - 1]                        // Return last weekday
         } else {                                                        // else
             return weekdays[ordinal]                                    // Return the nth weekday
         }
@@ -238,10 +273,61 @@ export class Recurrence {
 }
 
 
+/** recurrenceToObject ******************************************************************************************************************************
+ * Returns a plain RecurrenceData object containing all the persisted fields of the given recurrence.                                               *
+ ***************************************************************************************************************************************************/
+export function recurrenceToObject(recurrence: Recurrence): RecurrenceData {
+    return {
+        enabled: recurrence.enabled,
+        interval: recurrence.interval,
+        intervalNumber: recurrence.intervalNumber,
+        weekSunday: recurrence.weekSunday,
+        weekMonday: recurrence.weekMonday,
+        weekTuesday: recurrence.weekTuesday,
+        weekWednesday: recurrence.weekWednesday,
+        weekThursday: recurrence.weekThursday,
+        weekFriday: recurrence.weekFriday,
+        weekSaturday: recurrence.weekSaturday,
+        monthOrdinal: recurrence.monthOrdinal,
+        monthWeekday: recurrence.monthWeekday,
+        stopType: recurrence.stopType,
+        stopDate: recurrence.stopDate,
+        stopNumber: recurrence.stopNumber,
+    }
+}
+
+/** recurrenceFromObject ****************************************************************************************************************************
+ * Builds a Recurrence from a plain (possibly partial) RecurrenceData object. Null/undefined-safe: any missing field falls back to the same         *
+ * defaults as the Recurrence class.                                                                                                                *
+ ***************************************************************************************************************************************************/
+export function recurrenceFromObject(data: Partial<RecurrenceData> | null | undefined): Recurrence {
+    const recurrence = new Recurrence()
+    if (data === null || data === undefined) {
+        return recurrence
+    }
+    if (data.enabled !== undefined) { recurrence.enabled = Boolean(data.enabled) }
+    if (data.interval !== undefined) { recurrence.interval = String(data.interval) }
+    if (data.intervalNumber !== undefined) { recurrence.intervalNumber = Number(data.intervalNumber) }
+    if (data.weekSunday !== undefined) { recurrence.weekSunday = Boolean(data.weekSunday) }
+    if (data.weekMonday !== undefined) { recurrence.weekMonday = Boolean(data.weekMonday) }
+    if (data.weekTuesday !== undefined) { recurrence.weekTuesday = Boolean(data.weekTuesday) }
+    if (data.weekWednesday !== undefined) { recurrence.weekWednesday = Boolean(data.weekWednesday) }
+    if (data.weekThursday !== undefined) { recurrence.weekThursday = Boolean(data.weekThursday) }
+    if (data.weekFriday !== undefined) { recurrence.weekFriday = Boolean(data.weekFriday) }
+    if (data.weekSaturday !== undefined) { recurrence.weekSaturday = Boolean(data.weekSaturday) }
+    if (data.monthOrdinal !== undefined) { recurrence.monthOrdinal = String(data.monthOrdinal) }
+    if (data.monthWeekday !== undefined) { recurrence.monthWeekday = String(data.monthWeekday) }
+    if (data.stopType !== undefined) { recurrence.stopType = String(data.stopType) }
+    if (data.stopDate !== undefined) { recurrence.stopDate = data.stopDate === null ? null : String(data.stopDate) }
+    if (data.stopNumber !== undefined) { recurrence.stopNumber = Number(data.stopNumber) }
+    return recurrence
+}
+
+
 /** recurrenceToJSON ********************************************************************************************************************************
  * Save recurrence data as a json string                                                                                                            *
  ***************************************************************************************************************************************************/
- export function recurrenceToJSON(recurrence) {
+export function recurrenceToJSON(recurrence: Recurrence): string {
     return JSON.stringify({
         enabled: recurrence.enabled,
         interval: recurrence.interval,
@@ -258,15 +344,15 @@ export class Recurrence {
         stopType: recurrence.stopType,
         stopDate: recurrence.stopDate,
         stopNumber: recurrence.stopNumber,
-    });
+    })
 }
 
 /** recurrenceFromJSON **************************************************************************************************************************
  * Loads Recurrence data from a JSON string                                                                                                     *
  ***********************************************************************************************************************************************/
-export function recurrenceFromJSON(JSONstring){
-    var parsedJSON = JSON.parse(JSONstring)
-    var recurrence = new Recurrence()
+export function recurrenceFromJSON(JSONstring: string): Recurrence {
+    const parsedJSON = JSON.parse(JSONstring)
+    const recurrence = new Recurrence()
     recurrence.enabled = Boolean(parsedJSON.enabled)
     recurrence.intervalNumber = Number(parsedJSON.intervalNumber)
     recurrence.interval = String(parsedJSON.interval)
