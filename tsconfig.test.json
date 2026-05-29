@@ -1,0 +1,12 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"experimentalDecorators": true,
+		"emitDecoratorMetadata": true,
+		"esModuleInterop": true,
+		"module": "commonjs",
+		"target": "es2020",
+		"types": ["jest", "node"]
+	},
+	"include": ["src/**/*.ts", "test/**/*.ts", "api/types.ts"]
+}

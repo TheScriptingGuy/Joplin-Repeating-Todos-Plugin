@@ -1,10 +1,10 @@
 import joplin from 'api';
 
 // Core
-import { Database } from './core/database';
+import { RecurrenceStore } from './core/database';
 import { SettingsManager } from './core/settings';
 import { CommandManager } from './core/commands';
-import { TimerManager } from './core/timer';
+import { RecurrenceScheduler } from './core/timer';
 
 // GUI
 import { setupDialog } from './gui/dialog/dialog';
@@ -24,8 +24,8 @@ joplin.plugins.register({
  ***************************************************************************************************************************************************/
 async function main(): Promise<void> {
   try {
-    // 1. Initialize storage (no-op, but consistent)
-    await Database.setupDatabase();
+    // 1. Initialize storage
+    await RecurrenceStore.init();
 
     // 2. Register settings
     await SettingsManager.setup();
@@ -38,8 +38,8 @@ async function main(): Promise<void> {
     await setupMenu();
     await setupToolbar();
 
-    // 5. Start the recurring timer
-    await TimerManager.start();
+    // 5. Start the event-driven scheduler (+ safety-net sweep)
+    await RecurrenceScheduler.start();
 
     console.info('Joplin Repeating Todos Plugin: Fully loaded and running!');
   } catch (error) {

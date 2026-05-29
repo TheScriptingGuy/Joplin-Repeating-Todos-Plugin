@@ -1,6 +1,6 @@
 import joplin from 'api';
 import { SettingItemType } from 'api/types';
-import { TimerManager } from './timer';
+import { RecurrenceScheduler } from './timer';
 import { TryCatch } from './decorators';
 
 /**
@@ -44,8 +44,8 @@ export class SettingsManager {
 
     // Restart timer whenever settings change
     joplin.settings.onChange(async () => {
-      console.info('Settings changed — restarting timer...');
-      await TimerManager.start();
+      console.info('Settings changed — restarting scheduler...');
+      await RecurrenceScheduler.start();
     });
 
     console.info('Settings registered and change listener attached.');
