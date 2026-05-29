@@ -44,7 +44,8 @@ jobs:
           VERSION="$VERSION" node -e "const fs=require('fs');const p='src/manifest.json';const m=JSON.parse(fs.readFileSync(p,'utf8'));m.version=process.env.VERSION;fs.writeFileSync(p,JSON.stringify(m,null,'\t')+'\n');console.log('manifest.json version ->',m.version)"
           echo "PUBLISH_VERSION=$VERSION" >> "$GITHUB_ENV"
 
-      - run: npm ci
+      # --ignore-scripts skips the "prepare" lifecycle hook (which runs dist) since we run it explicitly below.
+      - run: npm ci --ignore-scripts
 
       # Gate the publish on the unit/integration suite passing.
       - run: npm test
@@ -52,9 +53,11 @@ jobs:
       # Build the publishable artifact (webpack -> ./publish, the only dir in package.json "files").
       - run: npm run dist
 
+      # NPM_TOKEN must be an Automation token (not a Publish token). Automation tokens bypass the
+      # OTP/2FA requirement that causes "npm error code EOTP" in CI. Create one at:
+      # npmjs.com → profile → Access Tokens → Generate New Token → Automation
       # publishConfig.access is already "public" in package.json. --ignore-scripts avoids rebuilding
-      # via the "prepare" hook since we just built above. Drop "--provenance" if your npm token type
-      # or registry settings don't support it.
+      # via the "prepare" hook since we just built above.
       - name: Publish to npm
         run: |
           echo "Publishing $(node -p "require('./package.json').name")@$PUBLISH_VERSION"
