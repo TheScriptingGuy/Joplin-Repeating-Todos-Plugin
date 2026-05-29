@@ -1,0 +1,42 @@
+name: Publish to npm
+
+# Publishes the plugin package to npm. Runs when a GitHub Release is published, or manually.
+# Requires a repository secret named NPM_TOKEN (an npm automation token with publish rights).
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Build & publish to npm
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      # Enables npm provenance attestations (optional; see the publish step).
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          # Writes an .npmrc pointing at the public registry and wires NODE_AUTH_TOKEN for auth.
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm ci
+
+      # Gate the publish on the unit/integration suite passing.
+      - run: npm test
+
+      # Build the publishable artifact (webpack -> ./publish, the only dir in package.json "files").
+      - run: npm run dist
+
+      # publishConfig.access is already "public" in package.json. --ignore-scripts avoids rebuilding
+      # via the "prepare" hook since we just built above. Drop "--provenance" if your npm token type
+      # or registry settings don't support it.
+      - name: Publish to npm
+        run: npm publish --provenance --ignore-scripts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
