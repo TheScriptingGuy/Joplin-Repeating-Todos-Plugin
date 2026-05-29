@@ -3,6 +3,10 @@
   "author": "TheScriptingGuy",
   "description": "A Joplin plugin to create repeating to-dos (version 2)",
   "version": "1.1.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheScriptingGuy/Joplin-Repeating-Todos-Plugin"
+  },
   "publishConfig": {
     "access": "public"
   },
