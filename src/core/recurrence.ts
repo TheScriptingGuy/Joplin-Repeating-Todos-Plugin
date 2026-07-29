@@ -9,9 +9,10 @@ import { Trace, TryCatch } from './decorators';
 /**
  * Central manager for all recurrence-related logic.
  *
- * The engine is alarm/event-native: advancement happens when a recurring to-do is marked complete
- * (observed via note-change / alarm events), not by polling note state. `updateAllRecurrences` remains
- * as a periodic safety-net sweep in case an event was missed.
+ * The engine is alarm/event-native: advancement happens when a recurring to-do is marked complete,
+ * or when its alarm passes while it is still open (observed via note-change / alarm events), not by
+ * polling note state. `updateAllRecurrences` remains as a periodic safety-net sweep in case an event
+ * was missed — which is also what catches alarms that elapsed while Joplin was closed.
  *
  * Persistence convention used throughout: when `recurrence.enabled` is true we `RecurrenceStore.set`,
  * and when it is false (e.g. after `updateStopStatus` exhausts a count/date limit, or the dialog
@@ -133,22 +134,28 @@ export class RecurrenceManager {
   }
 
   /**
-   * Event hook: an alarm fired for a note. Advancement happens on completion, so if the to-do is
-   * already complete we advance (same path as a note-change); otherwise the alarm merely notified
-   * the user and we no-op.
+   * Event hook: an alarm fired for a note. A completed to-do advances exactly as it would on a
+   * note-change; an open one is rolled on to its next occurrence when the `resetAlarmWhenNotDone`
+   * setting is on (the default), which re-arms the alarm without the to-do ever being ticked off.
+   * Both cases are handled by `processTodo`, so the alarm is just another way in.
    */
   @Trace()
   @TryCatch({ logError: true })
   static async handleAlarm(noteId: string): Promise<void> {
-    const note = await JoplinAPI.getNote(noteId);
-    if (!note) return;
-
-    if (note.todo_completed && note.todo_completed !== 0) {
-      await this.handleNoteChange(noteId);
-    }
+    await this.handleNoteChange(noteId);
   }
 
-  /** Core recurrence engine. */
+  /**
+   * Core recurrence engine.
+   *
+   * Two paths advance a to-do to its next occurrence:
+   *  - completion — the to-do was ticked off. It is reopened and its sub-tasks are reset.
+   *  - alarm reset — the due date/alarm passed while the to-do was still open, and
+   *    `resetAlarmWhenNotDone` is enabled. The missed occurrence is skipped and the alarm re-armed
+   *    on the next one; the to-do stays open and any sub-task progress is left untouched.
+   *
+   * Both paths consume one occurrence, so a stop-after-N recurrence counts skipped alarms too.
+   */
   @Trace()
   @TryCatch({ logError: true })
   private static async processTodo(
@@ -157,31 +164,56 @@ export class RecurrenceManager {
   ): Promise<void> {
     const recurrence = todo.recurrence;
 
-    if (
-      todo.todo_completed !== 0 &&
-      todo.todo_due !== 0 &&
-      recurrence.enabled
-    ) {
-      const initialDate = new Date(todo.todo_due);
-      const nextDate =
-        after == null
-          ? recurrence.getNextDate(initialDate)
-          : recurrence.getNextDateAfter(initialDate, after);
+    if (todo.todo_due === 0 || !recurrence.enabled) return;
 
-      if (!nextDate) return;
+    const completed = todo.todo_completed !== 0;
+    const now = new Date();
 
-      await JoplinAPI.setTaskDueDate(todo.id, nextDate);
+    if (!completed) {
+      // An open to-do only moves on once its alarm has actually passed, and only if the user has
+      // left the alarm-reset setting on.
+      if (todo.todo_due > now.getTime()) return;
+      if (!(await this.resetAlarmWhenNotDone())) return;
+    }
+
+    const initialDate = new Date(todo.todo_due);
+    // A skipped occurrence has to land in the future, otherwise a to-do that was missed several
+    // intervals ago (Joplin closed over the weekend, say) would only creep forward one step.
+    const notBefore = after ?? (completed ? null : now);
+    const nextDate =
+      notBefore == null
+        ? recurrence.getNextDate(initialDate)
+        : recurrence.getNextDateAfter(initialDate, notBefore);
+
+    if (!nextDate) return;
+
+    await JoplinAPI.setTaskDueDate(todo.id, nextDate);
+
+    if (completed) {
       await JoplinAPI.markTaskIncomplete(todo.id);
       await JoplinAPI.markSubTasksIncomplete(todo.id);
+    }
 
-      recurrence.updateStopStatus();
+    recurrence.updateStopStatus();
 
-      if (recurrence.enabled) {
-        await RecurrenceStore.set(todo.id, recurrence);
-      } else {
-        // The recurrence just hit its stop condition; drop it from the index.
-        await RecurrenceStore.remove(todo.id);
-      }
+    if (recurrence.enabled) {
+      await RecurrenceStore.set(todo.id, recurrence);
+    } else {
+      // The recurrence just hit its stop condition; drop it from the index.
+      await RecurrenceStore.remove(todo.id);
+    }
+  }
+
+  /**
+   * Reads the `resetAlarmWhenNotDone` setting. Defaults to true so an unreadable or not-yet-
+   * registered value keeps the documented default behaviour.
+   */
+  private static async resetAlarmWhenNotDone(): Promise<boolean> {
+    try {
+      const value = await joplin.settings.value('resetAlarmWhenNotDone');
+      return value === undefined || value === null ? true : Boolean(value);
+    } catch {
+      return true;
     }
   }
 }

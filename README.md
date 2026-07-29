@@ -32,7 +32,7 @@ A powerful and comprehensive plugin for to-do repetition/recurrence in [Joplin](
 
 ## Overview
 
-When a recurring to-do is marked complete, this plugin immediately resets the alarm date to the next recurrence and unmarks it as completed — so your to-do list is always up to date without any manual work.
+When a recurring to-do is marked complete, this plugin immediately resets the alarm date to the next recurrence and unmarks it as completed — so your to-do list is always up to date without any manual work. To-dos you *don't* get around to are not left behind either: by default a passed alarm is simply re-armed on the next occurrence, and you can [switch that off](#plugin-settings) if you would rather they stay overdue.
 
 Supported recurrence intervals: **minute, hour, day, week, month, year**
 
@@ -107,7 +107,7 @@ When **months** is selected, you can specify a particular weekday of the month (
 
 #### Step 7 — Save
 
-Click **OK** to save. The recurrence is now active. The next time you mark the to-do complete it will automatically reschedule.
+Click **OK** to save. The recurrence is now active. It reschedules automatically the next time you mark the to-do complete — or, unless you turn that off in the [plugin settings](#plugin-settings), the next time its alarm passes without it being done.
 
 ---
 
@@ -121,6 +121,11 @@ Access these options from **Tools → Repeating To-dos**:
 | **Update Overdue To-Dos** | Marks overdue to-dos complete and rolls their due date forward to the next occurrence past today |
 | **Reschedule Overdue To-Dos to Today** | Keeps the to-dos open but moves their due date to today (preserving the original time-of-day) |
 
+> With **Reset the alarm even when the to-do is not done** on (the default), overdue repeating
+> to-dos are already moved on automatically, so these commands are mostly a manual nudge. Note that
+> *Reschedule Overdue To-Dos to Today* can land on a time that has already passed today, in which
+> case the next automatic reset moves it on again.
+
 ### Plugin Settings
 
 Go to **Tools → Options → Repeating To-dos** to configure:
@@ -128,13 +133,41 @@ Go to **Tools → Options → Repeating To-dos** to configure:
 | Setting | Default | Description |
 |---|---|---|
 | Update frequency (seconds) | 30 | How often the safety-net sweep checks for missed recurring to-dos |
+| Reset the alarm even when the to-do is not done | **On** | Re-arms the alarm on the next occurrence when one passes without the to-do being completed. Turn it off to only advance to-dos when they are ticked off (the previous behaviour) |
 | Enable debug logging | Off | Writes detailed trace output to the developer console |
+
+#### Resetting the alarm without completing the to-do
+
+By default, a repeating to-do no longer waits to be ticked off before it moves on. When its alarm
+passes while the to-do is still open, the plugin skips that occurrence and re-arms the alarm on the
+next one — so a "water the plants every day" reminder pops up again tomorrow instead of sitting
+overdue forever.
+
+On the reset path the plugin deliberately does **less** than it does on completion:
+
+| | Completed | Alarm reset (not done) |
+|---|---|---|
+| Due date / alarm moves to the next occurrence | ✅ | ✅ |
+| To-do is re-opened | ✅ | — (it was never closed) |
+| Sub-tasks are reset to unchecked | ✅ | — (your progress is kept) |
+| Counts against an "after N times" stop condition | ✅ | ✅ |
+
+If several occurrences were missed — Joplin was closed over the weekend, say — the to-do is skipped
+forward far enough that the new alarm always lands in the future. Missed alarms are caught by the
+alarm event when Joplin is running, and by the safety-net sweep on startup when it was not.
+
+Turn the setting off in **Tools → Options → Repeating To-dos** to get the old behaviour, where an
+overdue to-do stays overdue until you complete it.
 
 ---
 
 ## How It Works
 
 ### Scheduling Flow
+
+Two things move a recurring to-do on to its next occurrence: completing it, or — with **Reset the
+alarm even when the to-do is not done** enabled (the default) — its alarm passing while it is still
+open.
 
 When you mark a recurring to-do as complete, the plugin immediately:
 
@@ -145,20 +178,29 @@ When you mark a recurring to-do as complete, the plugin immediately:
 5. Resets any sub-tasks to incomplete
 6. Checks whether the stop condition has been reached
 
+When an alarm passes on a to-do you have not done, steps 4 and 5 are skipped: the to-do stays open
+and keeps its sub-task progress, and only the alarm is moved forward.
+
 ```mermaid
 flowchart TD
-    A([User marks to-do complete]) --> B{Is it a\nrecurring to-do?}
-    B -- No --> C([Stays completed])
+    A([To-do completed\nor alarm fired]) --> B{Is it a\nrecurring to-do?}
+    B -- No --> C([Nothing to do])
     B -- Yes --> D{Has a\ndue date set?}
     D -- No --> C
-    D -- Yes --> E[Calculate next\noccurrence date]
+    D -- Yes --> Q{Marked\ncomplete?}
+    Q -- No --> R{Alarm passed and\nalarm reset enabled?}
+    R -- No --> S([Leave it alone\nwaits for completion])
+    R -- Yes --> T[Calculate first occurrence\nstrictly in the future]
+    T --> F
+    Q -- Yes --> E[Calculate next\noccurrence date]
     E --> F[Set due date\nto next occurrence]
-    F --> G[Mark to-do\nas incomplete]
-    G --> H[Reset sub-tasks\nto incomplete]
-    H --> I[Check stop condition]
+    F --> G{Was it\ncompleted?}
+    G -- No --> I[Check stop condition]
+    G -- Yes --> H[Mark to-do incomplete\nand reset sub-tasks]
+    H --> I
     I --> J{Stop condition\nreached?}
-    J -- Yes --> K([Remove from recurring index\nstays complete permanently])
-    J -- No --> L([Save updated settings\nwaits for next completion])
+    J -- Yes --> K([Remove from recurring index\nstops repeating])
+    J -- No --> L([Save updated settings\nwaits for next occurrence])
 ```
 
 ---
@@ -232,22 +274,21 @@ flowchart TD
 
     B --> F{Note changed}
     F --> G[Debounce 500 ms\nper note]
-    G --> H[Process to-do\nif now complete]
+    G --> H[Process to-do]
 
     C --> I{Alarm fired}
-    I --> J{Is the to-do\nalready complete?}
-    J -- Yes --> H
-    J -- No --> K([No-op:\nalarm just notified the user])
+    I --> H
 
     E --> L[Sweep all recurring\nto-dos in index]
     L --> H
 
     H --> M{Recurrence\nconditions met?}
-    M -- Yes --> N([Advance due date\nunmark complete])
-    M -- No --> O([Skip])
+    M -- Completed --> N([Advance due date\nunmark complete\nreset sub-tasks])
+    M -- Alarm passed,\nnot done --> P([Advance due date only\nto-do stays open])
+    M -- Neither --> O([Skip])
 
     style N fill:#d4edda
-    style K fill:#fff3cd
+    style P fill:#d4edda
     style O fill:#fff3cd
 ```
 
@@ -338,14 +379,14 @@ Enable **debug logging** in **Tools → Options → Repeating To-dos** to see de
 | Class | Responsibility |
 |---|---|
 | `RecurrenceStore` | Reads/writes recurrence settings to Joplin's `userData` API per note; maintains the `recurring` index tag |
-| `RecurrenceManager` | Core logic: processes a completed to-do, computes the next date, advances the alarm, handles overdue scenarios |
+| `RecurrenceManager` | Core logic: processes a completed to-do (or a passed alarm on an open one), computes the next date, advances the alarm, handles overdue scenarios |
 | `RecurrenceScheduler` | Wires up `onNoteChange` and `onNoteAlarmTrigger` Joplin events; runs a periodic safety-net sweep |
 | `SettingsManager` | Registers the plugin settings section and restarts the scheduler when settings change |
 | `CommandManager` | Registers the four Joplin commands exposed in the toolbar and menu |
 | `Recurrence` (model) | Holds all recurrence fields; implements `getNextDate`, `getNextDateAfter`, `updateStopStatus` |
 
 **Key design decisions:**
-- Advancement is **event-driven** (note change / alarm), not purely polling — this means the to-do advances the moment it is checked off, not at the next sweep interval
+- Advancement is **event-driven** (note change / alarm), not purely polling — this means the to-do advances the moment it is checked off, or the moment its alarm fires, not at the next sweep interval
 - The safety-net sweep (default every 30 s) catches anything the event listeners may have missed (e.g. a completion that happened while Joplin was closed)
 - Recurrence data is stored in `userData` (not in the note body) so it survives note edits and syncs cleanly across devices
 - Legacy YAML frontmatter from older plugin versions is automatically migrated to `userData` on first access
