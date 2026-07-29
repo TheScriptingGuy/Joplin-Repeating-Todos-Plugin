@@ -57,4 +57,22 @@ test.describe('Recurrence dialog round-trip', () => {
     state = await readRecurrenceDialog(win);
     expect(state.enabled).toBe(false);
   });
+
+  test('the alarm-reset option is off by default and stays per to-do', async () => {
+    const { win } = joplin;
+
+    // A to-do that opts in.
+    await createTodo(win, 'Opted In Todo ' + Date.now());
+    await setRecurrence(win, {
+      enabled: true,
+      interval: 'day',
+      resetAlarmWhenNotDone: true,
+    });
+    expect((await readRecurrenceDialog(win)).resetAlarmWhenNotDone).toBe(true);
+
+    // A second to-do set up the same way, minus that option, must not inherit it.
+    await createTodo(win, 'Plain Todo ' + Date.now());
+    await setRecurrence(win, { enabled: true, interval: 'day' });
+    expect((await readRecurrenceDialog(win)).resetAlarmWhenNotDone).toBe(false);
+  });
 });

@@ -201,6 +201,26 @@ function onIntervalNumberChanged() {
 }
 
 /******************************************************************************************************************************************
+****************************************************************** Alarm ******************************************************************
+******************************************************************************************************************************************/
+let alarmFieldset = safeGetElement('alarmFieldset');           // Gets the alarm Fieldset
+let resetAlarmCheckbox = safeGetElement('resetAlarmCheckbox'); // Gets the "move the alarm on when not done" checkbox
+
+if (resetAlarmCheckbox) {
+    resetAlarmCheckbox.addEventListener("change", onResetAlarmChanged);
+}
+
+/* onResetAlarmChanged ********************************************************************************************************************
+    Called if the reset-alarm checkbox is toggled. Saves the changes to the hidden form. This is a per-to-do option: it only affects the
+    to-do the dialog was opened for.
+*/
+function onResetAlarmChanged() {
+    if (!recurrence || !resetAlarmCheckbox) return;
+    recurrence.resetAlarmWhenNotDone = resetAlarmCheckbox.checked;
+    saveData();
+}
+
+/******************************************************************************************************************************************
  ***************************************************************** Enabled ****************************************************************
 ******************************************************************************************************************************************/
 let enabledCheckbox = safeGetElement('enabledCheckbox');       // Gets the enabled checkbox
@@ -224,12 +244,18 @@ function onEnabledChanged() {
         if (stopFieldset) {
             stopFieldset.style.display = 'block';                             // and the stop Fieldset
         }
+        if (alarmFieldset) {
+            alarmFieldset.style.display = 'block';                            // and the alarm Fieldset
+        }
     } else {                                                            // Otherwise...
         if (intervalFieldset) {
             intervalFieldset.style.display = 'none';                          // Hide the interval Fieldset
         }
         if (stopFieldset) {
             stopFieldset.style.display = 'none';                              // And the stop Fieldset
+        }
+        if (alarmFieldset) {
+            alarmFieldset.style.display = 'none';                             // And the alarm Fieldset
         }
     }
     onIntervalChanged();                                                // Calls the interval changed function for updating
@@ -278,7 +304,8 @@ function loadData() {
                 monthOrdinal: '',
                 stopType: '',
                 stopDate: '',
-                stopNumber: 0
+                stopNumber: 0,
+                resetAlarmWhenNotDone: false
             };
             return;
         }
@@ -301,6 +328,7 @@ function loadData() {
         if (stopTypeDropdown) stopTypeDropdown.value = recurrence.stopType || '';
         if (stopDatePicker) stopDatePicker && (stopDatePicker.value = recurrence.stopDate ? String(recurrence.stopDate) : "");
         if (stopNumberSpinbutton) stopNumberSpinbutton.value = recurrence.stopNumber || 0;
+        if (resetAlarmCheckbox) resetAlarmCheckbox.checked = recurrence.resetAlarmWhenNotDone || false;
 
         onEnabledChanged();
         onIntervalChanged();
@@ -324,7 +352,8 @@ function loadData() {
             monthOrdinal: '',
             stopType: '',
             stopDate: '',
-            stopNumber: 0
+            stopNumber: 0,
+            resetAlarmWhenNotDone: false
         };
     }
 }

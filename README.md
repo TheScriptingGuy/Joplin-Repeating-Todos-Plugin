@@ -32,7 +32,7 @@ A powerful and comprehensive plugin for to-do repetition/recurrence in [Joplin](
 
 ## Overview
 
-When a recurring to-do is marked complete, this plugin immediately resets the alarm date to the next recurrence and unmarks it as completed — so your to-do list is always up to date without any manual work. To-dos you *don't* get around to are not left behind either: by default a passed alarm is simply re-armed on the next occurrence, and you can [switch that off](#plugin-settings) if you would rather they stay overdue.
+When a recurring to-do is marked complete, this plugin immediately resets the alarm date to the next recurrence and unmarks it as completed — so your to-do list is always up to date without any manual work. To-dos you *don't* get around to need not be left behind either: tick [one option](#resetting-the-alarm-without-completing-the-to-do) on a to-do and a passed alarm is simply re-armed on the next occurrence instead of sitting there overdue.
 
 Supported recurrence intervals: **minute, hour, day, week, month, year**
 
@@ -107,7 +107,7 @@ When **months** is selected, you can specify a particular weekday of the month (
 
 #### Step 7 — Save
 
-Click **OK** to save. The recurrence is now active. It reschedules automatically the next time you mark the to-do complete — or, unless you turn that off in the [plugin settings](#plugin-settings), the next time its alarm passes without it being done.
+Click **OK** to save. The recurrence is now active. It reschedules automatically the next time you mark the to-do complete — or, if you ticked **Move the alarm on even when this To-Do is not done** for this to-do, the next time its alarm passes without it being done.
 
 ---
 
@@ -121,10 +121,10 @@ Access these options from **Tools → Repeating To-dos**:
 | **Update Overdue To-Dos** | Marks overdue to-dos complete and rolls their due date forward to the next occurrence past today |
 | **Reschedule Overdue To-Dos to Today** | Keeps the to-dos open but moves their due date to today (preserving the original time-of-day) |
 
-> With **Reset the alarm even when the to-do is not done** on (the default), overdue repeating
-> to-dos are already moved on automatically, so these commands are mostly a manual nudge. Note that
-> *Reschedule Overdue To-Dos to Today* can land on a time that has already passed today, in which
-> case the next automatic reset moves it on again.
+> To-dos that have **Move the alarm on even when this To-Do is not done** ticked are already moved
+> on automatically, so for those these commands are mostly a manual nudge. Note that *Reschedule
+> Overdue To-Dos to Today* can land on a time that has already passed today, in which case the next
+> automatic reset moves such a to-do on again.
 
 ### Plugin Settings
 
@@ -133,15 +133,33 @@ Go to **Tools → Options → Repeating To-dos** to configure:
 | Setting | Default | Description |
 |---|---|---|
 | Update frequency (seconds) | 30 | How often the safety-net sweep checks for missed recurring to-dos |
-| Reset the alarm even when the to-do is not done | **On** | Re-arms the alarm on the next occurrence when one passes without the to-do being completed. Turn it off to only advance to-dos when they are ticked off (the previous behaviour) |
 | Enable debug logging | Off | Writes detailed trace output to the developer console |
+| Remove all recurrence settings from all to-dos | Off | A one-shot action: switch it on to clear the recurrence settings of every to-do at once. See below |
+
+There is deliberately no global switch for the alarm-reset behaviour: it is set per to-do in the
+recurrence dialog (see [Resetting the alarm without completing the
+to-do](#resetting-the-alarm-without-completing-the-to-do)), so turning it on for one to-do never
+changes any of the others.
+
+#### Removing all recurrence settings at once
+
+Switching **Remove all recurrence settings from all to-dos** on clears the recurrence dialog
+settings of every to-do in one go. The plugin asks for confirmation first, then reports how many
+to-dos it cleared, and the switch turns itself back off — it is an action, not a state you leave on.
+
+What it removes is only what the recurrence dialog stores. Your to-dos are kept exactly as they are:
+alarms, contents, sub-tasks and completion state are all untouched; they simply stop repeating. The
+removed recurrence settings cannot be restored afterwards, so use it when you want a clean slate.
 
 #### Resetting the alarm without completing the to-do
 
-By default, a repeating to-do no longer waits to be ticked off before it moves on. When its alarm
-passes while the to-do is still open, the plugin skips that occurrence and re-arms the alarm on the
-next one — so a "water the plants every day" reminder pops up again tomorrow instead of sitting
-overdue forever.
+**Move the alarm on even when this To-Do is not done** is an option on each individual to-do, in the
+recurrence dialog, and it is **off by default**. Off, a repeating to-do behaves like any other
+to-do: once its alarm passes it stays overdue until you tick it off.
+
+Tick it for a to-do and, when its alarm passes while the to-do is still open, the plugin skips that
+occurrence and re-arms the alarm on the next one — so a "water the plants every day" reminder pops
+up again tomorrow instead of sitting overdue forever. Only the to-dos you tick it on are affected.
 
 On the reset path the plugin deliberately does **less** than it does on completion:
 
@@ -156,8 +174,8 @@ If several occurrences were missed — Joplin was closed over the weekend, say �
 forward far enough that the new alarm always lands in the future. Missed alarms are caught by the
 alarm event when Joplin is running, and by the safety-net sweep on startup when it was not.
 
-Turn the setting off in **Tools → Options → Repeating To-dos** to get the old behaviour, where an
-overdue to-do stays overdue until you complete it.
+Leave the option unticked — the default, including for every recurrence created before the option
+existed — to keep the plain behaviour, where an overdue to-do stays overdue until you complete it.
 
 ---
 
@@ -165,8 +183,8 @@ overdue to-do stays overdue until you complete it.
 
 ### Scheduling Flow
 
-Two things move a recurring to-do on to its next occurrence: completing it, or — with **Reset the
-alarm even when the to-do is not done** enabled (the default) — its alarm passing while it is still
+Two things move a recurring to-do on to its next occurrence: completing it, or — for a to-do with
+**Move the alarm on even when this To-Do is not done** ticked — its alarm passing while it is still
 open.
 
 When you mark a recurring to-do as complete, the plugin immediately:
@@ -188,7 +206,7 @@ flowchart TD
     B -- Yes --> D{Has a\ndue date set?}
     D -- No --> C
     D -- Yes --> Q{Marked\ncomplete?}
-    Q -- No --> R{Alarm passed and\nalarm reset enabled?}
+    Q -- No --> R{Alarm passed and\nthis to-do opted in?}
     R -- No --> S([Leave it alone\nwaits for completion])
     R -- Yes --> T[Calculate first occurrence\nstrictly in the future]
     T --> F
@@ -284,7 +302,7 @@ flowchart TD
 
     H --> M{Recurrence\nconditions met?}
     M -- Completed --> N([Advance due date\nunmark complete\nreset sub-tasks])
-    M -- Alarm passed,\nnot done --> P([Advance due date only\nto-do stays open])
+    M -- Alarm passed, not done,\nto-do opted in --> P([Advance due date only\nto-do stays open])
     M -- Neither --> O([Skip])
 
     style N fill:#d4edda
@@ -378,10 +396,10 @@ Enable **debug logging** in **Tools → Options → Repeating To-dos** to see de
 
 | Class | Responsibility |
 |---|---|
-| `RecurrenceStore` | Reads/writes recurrence settings to Joplin's `userData` API per note; maintains the `recurring` index tag |
+| `RecurrenceStore` | Reads/writes recurrence settings to Joplin's `userData` API per note; maintains the `recurring` index tag; can clear the whole index in one go |
 | `RecurrenceManager` | Core logic: processes a completed to-do (or a passed alarm on an open one), computes the next date, advances the alarm, handles overdue scenarios |
 | `RecurrenceScheduler` | Wires up `onNoteChange` and `onNoteAlarmTrigger` Joplin events; runs a periodic safety-net sweep |
-| `SettingsManager` | Registers the plugin settings section and restarts the scheduler when settings change |
+| `SettingsManager` | Registers the plugin settings section, restarts the scheduler when settings change, and runs the one-shot "remove all recurrence settings" toggle |
 | `CommandManager` | Registers the four Joplin commands exposed in the toolbar and menu |
 | `Recurrence` (model) | Holds all recurrence fields; implements `getNextDate`, `getNextDateAfter`, `updateStopStatus` |
 

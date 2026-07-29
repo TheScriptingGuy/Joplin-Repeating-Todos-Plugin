@@ -247,4 +247,51 @@ describe("RecurrenceStore", () => {
       expect(results).toEqual([]);
     });
   });
+
+  describe("removeAll", () => {
+    it("clears the recurrence data off every indexed note, to-do or not", async () => {
+      mockDataGet({
+        tags: { items: [{ id: "tag-1", title: "recurring" }], has_more: false },
+        tagNotes: {
+          items: [{ id: "todo-1" }, { id: "todo-2" }, { id: "not-todo" }],
+          has_more: false,
+        },
+      });
+
+      const cleared = await RecurrenceStore.removeAll();
+
+      expect(cleared).toBe(3);
+      for (const id of ["todo-1", "todo-2", "not-todo"]) {
+        expect(joplin.data.userDataDelete).toHaveBeenCalledWith(ModelType.Note, id, "recurrence");
+        expect(joplin.data.delete).toHaveBeenCalledWith(["tags", "tag-1", "notes", id]);
+      }
+      // The notes themselves are never written to — alarms and contents are left alone.
+      expect(joplin.data.put).not.toHaveBeenCalled();
+    });
+
+    it("walks every page of the index", async () => {
+      (joplin.data.get as jest.Mock).mockImplementation(async (path: string[], query: any) => {
+        if (path[0] === "tags" && path.length === 1) {
+          return { items: [{ id: "tag-1", title: "recurring" }], has_more: false };
+        }
+        if (path[0] === "tags" && path[2] === "notes") {
+          return query.page === 1
+            ? { items: [{ id: "todo-1" }], has_more: true }
+            : { items: [{ id: "todo-2" }], has_more: false };
+        }
+        return { items: [], has_more: false };
+      });
+
+      expect(await RecurrenceStore.removeAll()).toBe(2);
+      expect(joplin.data.userDataDelete).toHaveBeenCalledWith(ModelType.Note, "todo-2", "recurrence");
+    });
+
+    it("clears nothing when no recurring tag exists and none can be created", async () => {
+      mockDataGet({ tags: { items: [], has_more: false } });
+      (joplin.data.post as jest.Mock).mockResolvedValue(null);
+
+      expect(await RecurrenceStore.removeAll()).toBe(0);
+      expect(joplin.data.userDataDelete).not.toHaveBeenCalled();
+    });
+  });
 });

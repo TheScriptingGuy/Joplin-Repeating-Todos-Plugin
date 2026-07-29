@@ -34,6 +34,12 @@
  *      Valid values stop date are null and any datetime object                                                                                     *
  *      Valid values for stopNumber are any positive integer (zero and above)                                                                       *
  *                                                                                                                                                  *
+ *  resetAlarmWhenNotDone                                                                                                                           *
+ *      This boolean decides what happens when an occurrence passes while the to-do is still open. When false (the default) the to-do stays overdue *
+ *      until it is ticked off, which is how a to-do normally behaves. When true the alarm is re-armed on the next occurrence anyway; the to-do     *
+ *      stays open and its sub-tasks keep their progress. It is per-to-do on purpose: a daily habit may want the alarm to move on by itself, while  *
+ *      a task that must actually be done should stay overdue until it is.                                                                     *
+ *                                                                                                                                                  *
  ***************************************************************************************************************************************************/
 
 import { capitalize } from "../core/misc"
@@ -58,6 +64,7 @@ export interface RecurrenceData {
     stopType: string
     stopDate: string | null
     stopNumber: number
+    resetAlarmWhenNotDone: boolean
 }
 
 export class Recurrence {
@@ -78,6 +85,7 @@ export class Recurrence {
     public stopType: string = 'never'
     public stopDate: string | null = null
     public stopNumber: number = 1
+    public resetAlarmWhenNotDone: boolean = false
 
     /** Private Constants **************************************************************************************************************************/
     private weekdayStrings: string[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
@@ -293,6 +301,7 @@ export function recurrenceToObject(recurrence: Recurrence): RecurrenceData {
         stopType: recurrence.stopType,
         stopDate: recurrence.stopDate,
         stopNumber: recurrence.stopNumber,
+        resetAlarmWhenNotDone: recurrence.resetAlarmWhenNotDone,
     }
 }
 
@@ -320,6 +329,9 @@ export function recurrenceFromObject(data: Partial<RecurrenceData> | null | unde
     if (data.stopType !== undefined) { recurrence.stopType = String(data.stopType) }
     if (data.stopDate !== undefined) { recurrence.stopDate = data.stopDate === null ? null : String(data.stopDate) }
     if (data.stopNumber !== undefined) { recurrence.stopNumber = Number(data.stopNumber) }
+    // Absent on recurrences stored before the option existed, which keeps them on the default: an
+    // open to-do stays overdue until it is ticked off.
+    if (data.resetAlarmWhenNotDone !== undefined) { recurrence.resetAlarmWhenNotDone = Boolean(data.resetAlarmWhenNotDone) }
     return recurrence
 }
 
@@ -344,6 +356,7 @@ export function recurrenceToJSON(recurrence: Recurrence): string {
         stopType: recurrence.stopType,
         stopDate: recurrence.stopDate,
         stopNumber: recurrence.stopNumber,
+        resetAlarmWhenNotDone: recurrence.resetAlarmWhenNotDone,
     })
 }
 
@@ -368,5 +381,6 @@ export function recurrenceFromJSON(JSONstring: string): Recurrence {
     recurrence.stopType = String(parsedJSON.stopType)
     recurrence.stopDate = String(parsedJSON.stopDate)
     recurrence.stopNumber = Number(parsedJSON.stopNumber)
+    recurrence.resetAlarmWhenNotDone = Boolean(parsedJSON.resetAlarmWhenNotDone)
     return recurrence
 }

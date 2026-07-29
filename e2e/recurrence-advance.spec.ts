@@ -47,8 +47,8 @@ test.describe('Recurrence advancement', () => {
     const { win } = joplin;
     await createTodo(win, 'Advance Todo ' + Date.now());
 
-    // Deliberately in the future: an alarm that has already passed would be rolled forward by the
-    // "reset alarm when not done" behaviour before we get to complete it (see the next test).
+    // Deliberately in the future so the completion path is what is observed here (an already-passed
+    // alarm is only rolled forward when this to-do opts in — see the last test).
     const ORIGINAL = alarmString(daysFromNow(30));
     const EXPECTED = alarmString(daysFromNow(31));
 
@@ -77,14 +77,18 @@ test.describe('Recurrence advancement', () => {
     const { win } = joplin;
     await createTodo(win, 'Overdue Todo ' + Date.now());
 
-    // Alarm well in the past — the missed-occurrence path. With the default
-    // `resetAlarmWhenNotDone` setting the plugin re-arms the alarm on the next occurrence without
-    // the to-do ever being ticked off. The alarm event already fired long ago, so what picks this
-    // up is the periodic safety-net sweep (default every 30 s).
+    // Alarm well in the past — the missed-occurrence path. With this to-do's own
+    // "move the alarm on even when not done" option ticked, the plugin re-arms the alarm on the
+    // next occurrence without the to-do ever being ticked off. The alarm event already fired long
+    // ago, so what picks this up is the periodic safety-net sweep (default every 30 s).
     const ORIGINAL = '2020-03-10T08:00';
 
     await setAlarm(win, ORIGINAL);
-    await setRecurrence(win, { enabled: true, interval: 'day' });
+    await setRecurrence(win, {
+      enabled: true,
+      interval: 'day',
+      resetAlarmWhenNotDone: true,
+    });
 
     await expect
       .poll(async () => readAlarm(win), { timeout: 90_000, intervals: [2000] })
@@ -99,6 +103,24 @@ test.describe('Recurrence advancement', () => {
     );
 
     // KEY ASSERTION: the to-do was never marked complete along the way — only the alarm moved.
+    expect(await isTodoComplete(win)).toBe(false);
+  });
+
+  test('an OVERDUE recurring to-do that did NOT opt in keeps its alarm until it is done', async () => {
+    const { win } = joplin;
+    await createTodo(win, 'Overdue Untouched Todo ' + Date.now());
+
+    // Same setup as the test above, minus the per-to-do opt-in. The alarm must stay put: the
+    // alarm reset is a choice made per to-do, never something applied to every repeating to-do.
+    const ORIGINAL = '2020-03-10T08:00';
+
+    await setAlarm(win, ORIGINAL);
+    await setRecurrence(win, { enabled: true, interval: 'day' });
+
+    // Well past the safety-net sweep interval (default 30 s), so a sweep has definitely run.
+    await win.waitForTimeout(60_000);
+
+    expect(await readAlarm(win)).toBe(ORIGINAL);
     expect(await isTodoComplete(win)).toBe(false);
   });
 });

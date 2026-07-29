@@ -113,9 +113,15 @@ export class RecurrenceStore {
   @Trace()
   @TryCatch({ logError: true })
   static async remove(noteId: string): Promise<void> {
+    await this.removeUsingTag(await this.findOrCreateTagId(), noteId);
+  }
+
+  /** removeUsingTag ***********************************************************************************************************************
+   * The body of `remove` with the index tag already resolved, so bulk callers look it up only once.                                       *
+   *************************************************************************************************************************************/
+  private static async removeUsingTag(tagId: string | null, noteId: string): Promise<void> {
     await joplin.data.userDataDelete(ModelType.Note, noteId, this.RECURRENCE_KEY);
 
-    const tagId = await this.findOrCreateTagId();
     if (tagId) {
       try {
         await joplin.data.delete(["tags", tagId, "notes", noteId]);
@@ -135,19 +141,13 @@ export class RecurrenceStore {
     const tagId = await this.findOrCreateTagId();
     if (!tagId) return [];
 
-    const notes: any[] = [];
-    let page = 1;
-    let hasMore = true;
-    while (hasMore) {
-      const response = await joplin.data.get(["tags", tagId, "notes"], {
-        fields: ["id", "title", "is_todo", "todo_due", "todo_completed"],
-        page,
-      });
-      const items = response?.items || [];
-      notes.push(...items);
-      hasMore = Boolean(response?.has_more);
-      page += 1;
-    }
+    const notes = await this.getIndexedNotes(tagId, [
+      "id",
+      "title",
+      "is_todo",
+      "todo_due",
+      "todo_completed",
+    ]);
 
     const results: RecurringTodo[] = [];
     for (const note of notes) {
@@ -172,6 +172,45 @@ export class RecurrenceStore {
     }
 
     return results;
+  }
+
+  /** removeAll ****************************************************************************************************************************
+   * Wipes the recurrence data off every note in the recurring index, leaving the notes themselves   *
+   * (and their alarms) untouched. Returns how many notes were cleared.                              *
+   * Unlike getAllRecurringTodos this does not skip non-to-do notes, so nothing is left behind.     *
+   *************************************************************************************************************************************/
+  @Trace()
+  @TryCatch({ logError: true, fallback: 0 })
+  static async removeAll(): Promise<number> {
+    const tagId = await this.findOrCreateTagId();
+    if (!tagId) return 0;
+
+    const notes = await this.getIndexedNotes(tagId, ["id"]);
+    for (const note of notes) {
+      await this.removeUsingTag(tagId, note.id);
+    }
+
+    return notes.length;
+  }
+
+  /** getIndexedNotes **********************************************************************************************************************
+   * Returns every note carrying the `recurring` index tag, walking all pages of the tag query.      *
+   *************************************************************************************************************************************/
+  private static async getIndexedNotes(tagId: string, fields: string[]): Promise<any[]> {
+    const notes: any[] = [];
+    let page = 1;
+    let hasMore = true;
+    while (hasMore) {
+      const response = await joplin.data.get(["tags", tagId, "notes"], {
+        fields,
+        page,
+      });
+      const items = response?.items || [];
+      notes.push(...items);
+      hasMore = Boolean(response?.has_more);
+      page += 1;
+    }
+    return notes;
   }
 
   /** extractLegacyFrontmatter *************************************************************************************************************
