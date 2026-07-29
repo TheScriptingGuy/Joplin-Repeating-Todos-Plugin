@@ -3,6 +3,7 @@
 // The storage layer (RecurrenceStore) and the Joplin wrapper (JoplinAPI) are mocked so the engine
 // logic can be asserted in isolation. The real Recurrence model is used so date math is exercised.
 
+import joplin from 'api';
 import { RecurrenceManager } from '../src/core/recurrence';
 import { RecurrenceStore, RecurringTodo } from '../src/core/database';
 import { JoplinAPI } from '../src/core/joplin';
@@ -56,6 +57,9 @@ beforeEach(() => {
   mockApi.markTaskIncomplete.mockResolvedValue(undefined);
   mockApi.markSubTasksIncomplete.mockResolvedValue(undefined);
   mockApi.markTaskComplete.mockResolvedValue(undefined);
+  mockStore.removeAll.mockResolvedValue(0);
+  // showMessageBox returns 0 (OK) unless a test says otherwise.
+  (joplin.views.dialogs.showMessageBox as jest.Mock).mockResolvedValue(0);
   // Reset the static re-entrancy guard between tests.
   (RecurrenceManager as any).updating = false;
 });
@@ -357,5 +361,39 @@ describe('RecurrenceManager stop-by-number', () => {
     expect(recurrence.stopNumber).toBe(2);
     expect(mockStore.set).toHaveBeenCalledWith('note-1', recurrence);
     expect(mockStore.remove).not.toHaveBeenCalled();
+  });
+});
+
+describe('RecurrenceManager.clearAllRecurrences', () => {
+  it('clears every recurrence once the user confirms', async () => {
+    mockStore.removeAll.mockResolvedValue(4);
+
+    const cleared = await RecurrenceManager.clearAllRecurrences();
+
+    expect(cleared).toBe(4);
+    expect(mockStore.removeAll).toHaveBeenCalledTimes(1);
+    // The to-dos themselves are untouched: no due dates moved, no completion state changed.
+    expect(mockApi.setTaskDueDate).not.toHaveBeenCalled();
+    expect(mockApi.markTaskComplete).not.toHaveBeenCalled();
+    expect(mockApi.markTaskIncomplete).not.toHaveBeenCalled();
+    expect(mockApi.markSubTasksIncomplete).not.toHaveBeenCalled();
+  });
+
+  it('clears nothing when the user cancels the confirmation', async () => {
+    // showMessageBox returns 1 for Cancel.
+    (joplin.views.dialogs.showMessageBox as jest.Mock).mockResolvedValue(1);
+
+    const cleared = await RecurrenceManager.clearAllRecurrences();
+
+    expect(cleared).toBe(-1);
+    expect(mockStore.removeAll).not.toHaveBeenCalled();
+  });
+
+  it('reports back when there was nothing to clear', async () => {
+    mockStore.removeAll.mockResolvedValue(0);
+
+    expect(await RecurrenceManager.clearAllRecurrences()).toBe(0);
+    // Confirmation + result message.
+    expect(joplin.views.dialogs.showMessageBox).toHaveBeenCalledTimes(2);
   });
 });

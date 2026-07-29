@@ -22,6 +22,7 @@ const joplin: any = {
 	settings: {
 		// Returns false by default so e.g. the @Trace() "debug enabled" check is off.
 		value: jest.fn(async () => false),
+		setValue: jest.fn(async () => undefined),
 		onChange: jest.fn(),
 		registerSection: jest.fn(),
 		registerSettings: jest.fn(),
@@ -83,6 +84,8 @@ export function resetJoplinMock(): void {
 
 	joplin.settings.value.mockReset();
 	joplin.settings.value.mockImplementation(async () => false);
+	joplin.settings.setValue.mockReset();
+	joplin.settings.setValue.mockImplementation(async () => undefined);
 	joplin.settings.onChange.mockReset();
 	joplin.settings.registerSection.mockReset();
 	joplin.settings.registerSettings.mockReset();

@@ -60,6 +60,37 @@ export class RecurrenceManager {
     }
   }
 
+  /**
+   * Wipe the recurrence settings off every to-do, after confirming with the user.
+   *
+   * This only clears what the recurrence dialog stores (the userData entry and the `recurring`
+   * index tag). The to-dos themselves are left alone: their alarms, completion state and sub-tasks
+   * are untouched — they simply stop repeating. There is no undo, hence the confirmation.
+   *
+   * Returns the number of to-dos cleared, or -1 when the user cancelled.
+   */
+  @Trace()
+  @TryCatch({ logError: true, fallback: -1 })
+  static async clearAllRecurrences(): Promise<number> {
+    const confirmed = await joplin.views.dialogs.showMessageBox(
+      'Remove the recurrence settings from every to-do?\n\n' +
+        'All to-dos will stop repeating. Their alarms and contents are left as they are, but the ' +
+        'recurrence settings cannot be restored afterwards.'
+    );
+    // showMessageBox returns 0 for OK and 1 for Cancel.
+    if (confirmed !== 0) return -1;
+
+    const cleared = await RecurrenceStore.removeAll();
+
+    await joplin.views.dialogs.showMessageBox(
+      cleared === 0
+        ? 'No to-dos had recurrence settings to remove.'
+        : `Recurrence settings removed from ${cleared} to-do${cleared === 1 ? '' : 's'}.`
+    );
+
+    return cleared;
+  }
+
   /** Move overdue todos to today (preserve time-of-day). */
   @Trace()
   @TryCatch({ logError: true })

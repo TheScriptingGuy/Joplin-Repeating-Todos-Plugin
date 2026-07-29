@@ -134,9 +134,22 @@ Go to **Tools → Options → Repeating To-dos** to configure:
 |---|---|---|
 | Update frequency (seconds) | 30 | How often the safety-net sweep checks for missed recurring to-dos |
 | Enable debug logging | Off | Writes detailed trace output to the developer console |
+| Remove all recurrence settings from all to-dos | Off | A one-shot action: switch it on to clear the recurrence settings of every to-do at once. See below |
 
-There is deliberately no global switch for the alarm-reset behaviour below: it is set per to-do in
-the recurrence dialog, so turning it on for one to-do never changes any of the others.
+There is deliberately no global switch for the alarm-reset behaviour: it is set per to-do in the
+recurrence dialog (see [Resetting the alarm without completing the
+to-do](#resetting-the-alarm-without-completing-the-to-do)), so turning it on for one to-do never
+changes any of the others.
+
+#### Removing all recurrence settings at once
+
+Switching **Remove all recurrence settings from all to-dos** on clears the recurrence dialog
+settings of every to-do in one go. The plugin asks for confirmation first, then reports how many
+to-dos it cleared, and the switch turns itself back off — it is an action, not a state you leave on.
+
+What it removes is only what the recurrence dialog stores. Your to-dos are kept exactly as they are:
+alarms, contents, sub-tasks and completion state are all untouched; they simply stop repeating. The
+removed recurrence settings cannot be restored afterwards, so use it when you want a clean slate.
 
 #### Resetting the alarm without completing the to-do
 
@@ -383,10 +396,10 @@ Enable **debug logging** in **Tools → Options → Repeating To-dos** to see de
 
 | Class | Responsibility |
 |---|---|
-| `RecurrenceStore` | Reads/writes recurrence settings to Joplin's `userData` API per note; maintains the `recurring` index tag |
+| `RecurrenceStore` | Reads/writes recurrence settings to Joplin's `userData` API per note; maintains the `recurring` index tag; can clear the whole index in one go |
 | `RecurrenceManager` | Core logic: processes a completed to-do (or a passed alarm on an open one), computes the next date, advances the alarm, handles overdue scenarios |
 | `RecurrenceScheduler` | Wires up `onNoteChange` and `onNoteAlarmTrigger` Joplin events; runs a periodic safety-net sweep |
-| `SettingsManager` | Registers the plugin settings section and restarts the scheduler when settings change |
+| `SettingsManager` | Registers the plugin settings section, restarts the scheduler when settings change, and runs the one-shot "remove all recurrence settings" toggle |
 | `CommandManager` | Registers the four Joplin commands exposed in the toolbar and menu |
 | `Recurrence` (model) | Holds all recurrence fields; implements `getNextDate`, `getNextDateAfter`, `updateStopStatus` |
 
