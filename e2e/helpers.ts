@@ -90,6 +90,8 @@ export interface RecurrenceConfig {
     'sunday' | 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday'
   >;
   stop?: RecurrenceStop;
+  /** Tick the per-to-do "move the alarm on even when this To-Do is not done" option. */
+  resetAlarmWhenNotDone?: boolean;
 }
 
 const WEEKDAY_IDS: Record<string, string> = {
@@ -139,6 +141,9 @@ export async function setRecurrence(win: Page, config: RecurrenceConfig): Promis
         await setCheckbox(frame, id, config.weekdays.includes(name as any));
       }
     }
+    if (config.resetAlarmWhenNotDone != null) {
+      await setCheckbox(frame, '#resetAlarmCheckbox', config.resetAlarmWhenNotDone);
+    }
     if (config.stop) {
       await frame.locator('#stopTypeDropdown').selectOption(config.stop.type);
       if (config.stop.type === 'number' && config.stop.number != null) {
@@ -163,6 +168,7 @@ export interface RecurrenceState {
   intervalNumber: string;
   weekdays: Record<string, boolean>;
   stopType: string;
+  resetAlarmWhenNotDone: boolean;
 }
 
 /**
@@ -176,6 +182,7 @@ export async function readRecurrenceDialog(win: Page): Promise<RecurrenceState> 
   const interval = await frame.locator('#intervalDropdown').inputValue();
   const intervalNumber = await frame.locator('#intervalNumberSpinbutton').inputValue();
   const stopType = await frame.locator('#stopTypeDropdown').inputValue();
+  const resetAlarmWhenNotDone = await frame.locator('#resetAlarmCheckbox').isChecked();
 
   const weekdays: Record<string, boolean> = {};
   for (const [name, id] of Object.entries(WEEKDAY_IDS)) {
@@ -186,7 +193,7 @@ export async function readRecurrenceDialog(win: Page): Promise<RecurrenceState> 
   await win.locator('button:has-text("Cancel")').last().click();
   await win.waitForTimeout(SETTLE);
 
-  return { enabled, interval, intervalNumber, weekdays, stopType };
+  return { enabled, interval, intervalNumber, weekdays, stopType, resetAlarmWhenNotDone };
 }
 
 /** ----------------------------------------------------------------------------------------------

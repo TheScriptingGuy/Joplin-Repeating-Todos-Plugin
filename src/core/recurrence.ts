@@ -135,9 +135,10 @@ export class RecurrenceManager {
 
   /**
    * Event hook: an alarm fired for a note. A completed to-do advances exactly as it would on a
-   * note-change; an open one is rolled on to its next occurrence when the `resetAlarmWhenNotDone`
-   * setting is on (the default), which re-arms the alarm without the to-do ever being ticked off.
-   * Both cases are handled by `processTodo`, so the alarm is just another way in.
+   * note-change; an open one is rolled on to its next occurrence only when that to-do has
+   * `resetAlarmWhenNotDone` set on its own recurrence, which re-arms the alarm without the to-do
+   * ever being ticked off. Both cases are handled by `processTodo`, so the alarm is just another
+   * way in.
    */
   @Trace()
   @TryCatch({ logError: true })
@@ -150,9 +151,10 @@ export class RecurrenceManager {
    *
    * Two paths advance a to-do to its next occurrence:
    *  - completion — the to-do was ticked off. It is reopened and its sub-tasks are reset.
-   *  - alarm reset — the due date/alarm passed while the to-do was still open, and
-   *    `resetAlarmWhenNotDone` is enabled. The missed occurrence is skipped and the alarm re-armed
-   *    on the next one; the to-do stays open and any sub-task progress is left untouched.
+   *  - alarm reset — the due date/alarm passed while the to-do was still open, and this to-do's
+   *    recurrence has `resetAlarmWhenNotDone` ticked. The missed occurrence is skipped and the
+   *    alarm re-armed on the next one; the to-do stays open and any sub-task progress is left
+   *    untouched. Off by default, so a repeating to-do that is not done stays overdue.
    *
    * Both paths consume one occurrence, so a stop-after-N recurrence counts skipped alarms too.
    */
@@ -170,10 +172,11 @@ export class RecurrenceManager {
     const now = new Date();
 
     if (!completed) {
-      // An open to-do only moves on once its alarm has actually passed, and only if the user has
-      // left the alarm-reset setting on.
+      // An open to-do only moves on once its alarm has actually passed, and only when this
+      // particular to-do was set up to have its alarm reset. Every other repeating to-do stays
+      // overdue until it is ticked off.
+      if (!recurrence.resetAlarmWhenNotDone) return;
       if (todo.todo_due > now.getTime()) return;
-      if (!(await this.resetAlarmWhenNotDone())) return;
     }
 
     const initialDate = new Date(todo.todo_due);
@@ -201,19 +204,6 @@ export class RecurrenceManager {
     } else {
       // The recurrence just hit its stop condition; drop it from the index.
       await RecurrenceStore.remove(todo.id);
-    }
-  }
-
-  /**
-   * Reads the `resetAlarmWhenNotDone` setting. Defaults to true so an unreadable or not-yet-
-   * registered value keeps the documented default behaviour.
-   */
-  private static async resetAlarmWhenNotDone(): Promise<boolean> {
-    try {
-      const value = await joplin.settings.value('resetAlarmWhenNotDone');
-      return value === undefined || value === null ? true : Boolean(value);
-    } catch {
-      return true;
     }
   }
 }

@@ -266,6 +266,7 @@ describe('Object round-trip (recurrenceToObject / recurrenceFromObject)', () => 
 			stopType: 'date',
 			stopDate: '2027-06-15',
 			stopNumber: 9,
+			resetAlarmWhenNotDone: true,
 		});
 		const round = recurrenceFromObject(recurrenceToObject(r));
 		expect(recurrenceToObject(round)).toEqual(recurrenceToObject(r));
@@ -288,6 +289,7 @@ describe('Object round-trip (recurrenceToObject / recurrenceFromObject)', () => 
 		expect(r.stopType).toBe('never');
 		expect(r.stopDate).toBeNull();
 		expect(r.stopNumber).toBe(1);
+		expect(r.resetAlarmWhenNotDone).toBe(false);
 	});
 
 	it('recurrenceFromObject is undefined-safe', () => {
@@ -303,6 +305,13 @@ describe('Object round-trip (recurrenceToObject / recurrenceFromObject)', () => 
 		// Unspecified fields fall back to class defaults.
 		expect(r.intervalNumber).toBe(1);
 		expect(r.stopType).toBe('never');
+	});
+
+	it('leaves the alarm reset off for recurrences stored before the option existed', () => {
+		// Recurrences written by an older version carry no resetAlarmWhenNotDone key, so they must
+		// keep the default: an open to-do stays overdue until it is ticked off.
+		const r = recurrenceFromObject({ enabled: true, interval: 'day', intervalNumber: 1 });
+		expect(r.resetAlarmWhenNotDone).toBe(false);
 	});
 });
 
@@ -343,6 +352,7 @@ describe('JSON round-trip (recurrenceToJSON / recurrenceFromJSON)', () => {
 		expect(round.stopType).toBe(r.stopType);
 		expect(round.stopDate).toBe(r.stopDate);
 		expect(round.stopNumber).toBe(r.stopNumber);
+		expect(round.resetAlarmWhenNotDone).toBe(r.resetAlarmWhenNotDone);
 	});
 
 	it('JSON shape contains exactly the persisted field set', () => {
@@ -355,6 +365,7 @@ describe('JSON round-trip (recurrenceToJSON / recurrenceFromJSON)', () => {
 				'intervalNumber',
 				'monthOrdinal',
 				'monthWeekday',
+				'resetAlarmWhenNotDone',
 				'stopDate',
 				'stopNumber',
 				'stopType',

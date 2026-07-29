@@ -3,7 +3,6 @@
 // The storage layer (RecurrenceStore) and the Joplin wrapper (JoplinAPI) are mocked so the engine
 // logic can be asserted in isolation. The real Recurrence model is used so date math is exercised.
 
-import joplin from 'api';
 import { RecurrenceManager } from '../src/core/recurrence';
 import { RecurrenceStore, RecurringTodo } from '../src/core/database';
 import { JoplinAPI } from '../src/core/joplin';
@@ -14,16 +13,6 @@ jest.mock('../src/core/joplin');
 
 const mockStore = RecurrenceStore as jest.Mocked<typeof RecurrenceStore>;
 const mockApi = JoplinAPI as jest.Mocked<typeof JoplinAPI>;
-
-/**
- * Sets the `resetAlarmWhenNotDone` setting for a test while leaving every other setting (notably
- * `debug`, which drives @Trace) off.
- */
-function setResetAlarmWhenNotDone(enabled: boolean): void {
-  (joplin.settings.value as jest.Mock).mockImplementation(
-    async (key: string) => (key === 'resetAlarmWhenNotDone' ? enabled : false)
-  );
-}
 
 /** Milliseconds offset from now, for time-relative test fixtures. */
 function fromNow(ms: number): number {
@@ -67,8 +56,6 @@ beforeEach(() => {
   mockApi.markTaskIncomplete.mockResolvedValue(undefined);
   mockApi.markSubTasksIncomplete.mockResolvedValue(undefined);
   mockApi.markTaskComplete.mockResolvedValue(undefined);
-  // Default to the old behaviour; the alarm-reset tests opt in explicitly.
-  setResetAlarmWhenNotDone(false);
   // Reset the static re-entrancy guard between tests.
   (RecurrenceManager as any).updating = false;
 });
@@ -92,7 +79,7 @@ describe('RecurrenceManager.updateAllRecurrences (sweep)', () => {
     expect(mockStore.remove).not.toHaveBeenCalled();
   });
 
-  it('does not advance an incomplete todo when alarm reset is off', async () => {
+  it('does not advance an incomplete todo when alarm reset is off for it', async () => {
     const todo = makeTodo({ todo_completed: 0 });
     mockStore.getAllRecurringTodos.mockResolvedValue([todo]);
 
@@ -194,7 +181,7 @@ describe('RecurrenceManager.handleAlarm', () => {
     expect(mockApi.setTaskDueDate).toHaveBeenCalledTimes(1);
   });
 
-  it('no-ops on an incomplete todo when alarm reset is off', async () => {
+  it('no-ops on an incomplete todo when alarm reset is off for it', async () => {
     mockApi.getNote.mockResolvedValue({
       id: 'note-1',
       is_todo: 1,
@@ -209,7 +196,7 @@ describe('RecurrenceManager.handleAlarm', () => {
   });
 });
 
-describe('RecurrenceManager alarm reset (resetAlarmWhenNotDone)', () => {
+describe('RecurrenceManager alarm reset (per-to-do resetAlarmWhenNotDone)', () => {
   /** An incomplete todo whose alarm went off an hour ago. */
   function overdueOpenNote(overrides: Record<string, any> = {}) {
     return {
@@ -223,10 +210,9 @@ describe('RecurrenceManager alarm reset (resetAlarmWhenNotDone)', () => {
   }
 
   it('re-arms the alarm on the next occurrence without completing the todo', async () => {
-    setResetAlarmWhenNotDone(true);
     const note = overdueOpenNote();
     mockApi.getNote.mockResolvedValue(note);
-    const recurrence = dailyRecurrence();
+    const recurrence = dailyRecurrence({ resetAlarmWhenNotDone: true });
     mockStore.get.mockResolvedValue(recurrence);
 
     await RecurrenceManager.handleAlarm('note-1');
@@ -245,11 +231,12 @@ describe('RecurrenceManager alarm reset (resetAlarmWhenNotDone)', () => {
   });
 
   it('skips past every missed occurrence so the new alarm is in the future', async () => {
-    setResetAlarmWhenNotDone(true);
     // Hourly recurrence that was last due three and a half hours ago.
     const dueAt = fromNow(-3.5 * ONE_HOUR);
     mockApi.getNote.mockResolvedValue(overdueOpenNote({ todo_due: dueAt }));
-    mockStore.get.mockResolvedValue(dailyRecurrence({ interval: 'hour' }));
+    mockStore.get.mockResolvedValue(
+      dailyRecurrence({ interval: 'hour', resetAlarmWhenNotDone: true })
+    );
 
     await RecurrenceManager.handleAlarm('note-1');
 
@@ -260,9 +247,8 @@ describe('RecurrenceManager alarm reset (resetAlarmWhenNotDone)', () => {
   });
 
   it('leaves a todo alone when its alarm has not fired yet', async () => {
-    setResetAlarmWhenNotDone(true);
     mockApi.getNote.mockResolvedValue(overdueOpenNote({ todo_due: fromNow(ONE_HOUR) }));
-    mockStore.get.mockResolvedValue(dailyRecurrence());
+    mockStore.get.mockResolvedValue(dailyRecurrence({ resetAlarmWhenNotDone: true }));
 
     await RecurrenceManager.handleAlarm('note-1');
 
@@ -271,9 +257,8 @@ describe('RecurrenceManager alarm reset (resetAlarmWhenNotDone)', () => {
   });
 
   it('leaves a todo with no due date alone', async () => {
-    setResetAlarmWhenNotDone(true);
     mockApi.getNote.mockResolvedValue(overdueOpenNote({ todo_due: 0 }));
-    mockStore.get.mockResolvedValue(dailyRecurrence());
+    mockStore.get.mockResolvedValue(dailyRecurrence({ resetAlarmWhenNotDone: true }));
 
     await RecurrenceManager.handleAlarm('note-1');
 
@@ -281,8 +266,11 @@ describe('RecurrenceManager alarm reset (resetAlarmWhenNotDone)', () => {
   });
 
   it('catches alarms missed while Joplin was closed via the safety-net sweep', async () => {
-    setResetAlarmWhenNotDone(true);
-    const todo = makeTodo({ todo_due: fromNow(-ONE_HOUR), todo_completed: 0 });
+    const todo = makeTodo({
+      todo_due: fromNow(-ONE_HOUR),
+      todo_completed: 0,
+      recurrence: dailyRecurrence({ resetAlarmWhenNotDone: true }),
+    });
     mockStore.getAllRecurringTodos.mockResolvedValue([todo]);
 
     await RecurrenceManager.updateAllRecurrences();
@@ -292,8 +280,11 @@ describe('RecurrenceManager alarm reset (resetAlarmWhenNotDone)', () => {
   });
 
   it('consumes an occurrence of a stop-after-N recurrence when the alarm is skipped', async () => {
-    setResetAlarmWhenNotDone(true);
-    const recurrence = dailyRecurrence({ stopType: 'number', stopNumber: 1 });
+    const recurrence = dailyRecurrence({
+      stopType: 'number',
+      stopNumber: 1,
+      resetAlarmWhenNotDone: true,
+    });
     mockApi.getNote.mockResolvedValue(overdueOpenNote());
     mockStore.get.mockResolvedValue(recurrence);
 
@@ -304,17 +295,37 @@ describe('RecurrenceManager alarm reset (resetAlarmWhenNotDone)', () => {
     expect(mockStore.remove).toHaveBeenCalledWith('note-1');
   });
 
-  it('defaults to on when the setting cannot be read', async () => {
-    (joplin.settings.value as jest.Mock).mockImplementation(async (key: string) => {
-      if (key === 'resetAlarmWhenNotDone') throw new Error('setting not registered');
-      return false;
-    });
+  it('is off by default, so an overdue open to-do is left alone', async () => {
     mockApi.getNote.mockResolvedValue(overdueOpenNote());
     mockStore.get.mockResolvedValue(dailyRecurrence());
 
     await RecurrenceManager.handleAlarm('note-1');
 
+    expect(mockApi.setTaskDueDate).not.toHaveBeenCalled();
+    expect(mockStore.set).not.toHaveBeenCalled();
+  });
+
+  it('only touches the to-dos that opted in, not every recurring to-do', async () => {
+    const optedIn = makeTodo({
+      id: 'note-opted-in',
+      todo_due: fromNow(-ONE_HOUR),
+      todo_completed: 0,
+      recurrence: dailyRecurrence({ resetAlarmWhenNotDone: true }),
+    });
+    const untouched = makeTodo({
+      id: 'note-plain',
+      todo_due: fromNow(-ONE_HOUR),
+      todo_completed: 0,
+      recurrence: dailyRecurrence(),
+    });
+    mockStore.getAllRecurringTodos.mockResolvedValue([optedIn, untouched]);
+
+    await RecurrenceManager.updateAllRecurrences();
+
     expect(mockApi.setTaskDueDate).toHaveBeenCalledTimes(1);
+    expect(mockApi.setTaskDueDate.mock.calls[0][0]).toBe('note-opted-in');
+    expect(mockStore.set).toHaveBeenCalledTimes(1);
+    expect(mockStore.set.mock.calls[0][0]).toBe('note-opted-in');
   });
 });
 

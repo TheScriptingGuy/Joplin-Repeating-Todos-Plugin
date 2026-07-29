@@ -19,6 +19,12 @@ export async function setupDialog() {  // Named export (no default needed)
         <label for="enabledCheckbox">This To-Do Repeats</label>
     </fieldset>
 
+    <fieldset id="alarmFieldset">
+        <legend>Alarm</legend>
+        <input id="resetAlarmCheckbox" type="checkbox" value="True">
+        <label for="resetAlarmCheckbox">Move the alarm on even when this To-Do is not done</label>
+    </fieldset>
+
     <fieldset id="intervalFieldset">
         <legend>Interval</legend>
         <input id="intervalNumberSpinbutton" type="number" min="1" max="999" step="1" value="1">
