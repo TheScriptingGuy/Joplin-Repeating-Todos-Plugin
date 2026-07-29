@@ -32,6 +32,18 @@ export class SettingsManager {
         minimum: 10,
         maximum: 3600,
       },
+      resetAlarmWhenNotDone: {
+        label: 'Reset the alarm even when the to-do is not done',
+        description:
+          'When a repeating to-do\'s alarm passes without it being marked as done, re-arm the ' +
+          'alarm on the next occurrence anyway. The to-do stays open and its sub-tasks keep ' +
+          'their progress. Turn this off to only advance repeating to-dos when they are ' +
+          'completed (the previous behaviour).',
+        value: true,
+        type: SettingItemType.Bool,
+        public: true,
+        section: this.SECTION_ID,
+      },
       debug: {
         label: 'Enable debug logging',
         description: 'Logs detailed info to the developer console',
