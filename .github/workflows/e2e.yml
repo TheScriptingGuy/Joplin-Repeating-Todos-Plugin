@@ -41,6 +41,7 @@ jobs:
 
       # Electron is Chromium under the hood, so Playwright's chromium host deps cover Joplin too.
       # Also install Xvfb for the virtual display the GUI requires.
+      # The Chromium browser itself (needed by the mobile WebView tests) is fetched by setup-e2e.sh.
       - name: Install Electron/Chromium system dependencies + Xvfb
         run: |
           sudo npx playwright install-deps chromium

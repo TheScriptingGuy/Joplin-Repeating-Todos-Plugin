@@ -381,8 +381,13 @@ under a virtual display. Two kinds of test live in `e2e/`:
   on mobile the dialog's OK/Cancel buttons are native controls **outside** the WebView, so tapping OK
   never blurs the field the user is editing.
 
-If `npx playwright install` cannot download browsers (offline or restricted CI), point the suite at an
-existing Chromium build with `PLAYWRIGHT_CHROMIUM_PATH=/path/to/chrome`.
+Use `npm run test:e2e` rather than calling `playwright test` directly — the real-app tests launch
+Electron, which needs the virtual display that the script's `xvfb-run` wrapper provides. Without it they
+fail with `Joplin CDP endpoint never came up`.
+
+If `npx playwright install` cannot download browsers (offline or restricted CI), the config falls back
+to any Chromium already installed under `PLAYWRIGHT_BROWSERS_PATH` or `~/.cache/ms-playwright`. Set
+`PLAYWRIGHT_CHROMIUM_PATH=/path/to/chrome` to force a specific binary.
 
 For manual integration testing, launch Joplin in development mode and load the plugin from the `/publish` folder as a development plugin:
 
