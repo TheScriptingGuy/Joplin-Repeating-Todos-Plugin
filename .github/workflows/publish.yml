@@ -1,7 +1,15 @@
 name: Publish to npm
 
 # Publishes the plugin package to npm. Runs when a GitHub Release is published, or manually.
-# Requires a repository secret named NPM_TOKEN (an npm automation token with publish rights).
+#
+# Auth is npm "trusted publishing" (OIDC): no NPM_TOKEN secret is used or needed. The job exchanges
+# a short-lived GitHub OIDC token for npm publish rights. One-time setup on npmjs.com:
+#   package page → Settings → Trusted publishers → GitHub Actions
+#   Organization or user: TheScriptingGuy
+#   Repository:           Joplin-Repeating-Todos-Plugin
+#   Workflow filename:    publish.yml
+#   Environment:          npm            (must match the `environment:` below)
+# Once that is configured, any NPM_TOKEN repository secret can be deleted.
 on:
   release:
     types: [published]
@@ -11,19 +19,29 @@ jobs:
   publish:
     name: Build & publish to npm
     runs-on: ubuntu-24.04
+    # Must match the environment name registered on the npm trusted publisher. It also lets you gate
+    # publishes behind required reviewers / branch rules via the repo's Settings → Environments.
+    environment: npm
     permissions:
       contents: read
-      # Enables npm provenance attestations (optional; see the publish step).
+      # Required: lets the job mint the OIDC token npm exchanges for publish rights (and provenance).
       id-token: write
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
-          # Writes an .npmrc pointing at the public registry and wires NODE_AUTH_TOKEN for auth.
+          # Writes an .npmrc pointing at the public registry. Still needed for OIDC: the registry
+          # must be registry.npmjs.org for npm to attempt the trusted-publishing token exchange.
           registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing requires npm >= 11.5.1; Node 22 still ships npm 10.x, so upgrade first.
+      - name: Upgrade npm (trusted publishing support)
+        run: |
+          npm install -g npm@latest
+          npm --version
 
       # Resolve the version to publish: on a Release, take it from the tag (e.g. v1.2.0 -> 1.2.0);
       # otherwise (manual workflow_dispatch) use the existing package.json version. The resolved
@@ -53,14 +71,11 @@ jobs:
       # Build the publishable artifact (webpack -> ./publish, the only dir in package.json "files").
       - run: npm run dist
 
-      # NPM_TOKEN must be an Automation token (not a Publish token). Automation tokens bypass the
-      # OTP/2FA requirement that causes "npm error code EOTP" in CI. Create one at:
-      # npmjs.com → profile → Access Tokens → Generate New Token → Automation
-      # publishConfig.access is already "public" in package.json. --ignore-scripts avoids rebuilding
-      # via the "prepare" hook since we just built above.
+      # No NODE_AUTH_TOKEN: npm detects the Actions OIDC environment and exchanges an id-token for a
+      # short-lived publish credential. Provenance attestations are generated automatically for
+      # trusted publishes, so --provenance is not passed. publishConfig.access is already "public" in
+      # package.json. --ignore-scripts avoids rebuilding via the "prepare" hook since we just built above.
       - name: Publish to npm
         run: |
           echo "Publishing $(node -p "require('./package.json').name")@$PUBLISH_VERSION"
-          npm publish --provenance --ignore-scripts
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          npm publish --ignore-scripts
