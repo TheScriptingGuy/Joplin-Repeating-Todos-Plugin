@@ -115,9 +115,14 @@ async function setCheckbox(frame: Frame, selector: string, desired: boolean): Pr
  * Open the recurrence dialog (must be open already? — no, this opens it), fill the form to match
  * `config`, and click OK to persist.
  *
- * Gotcha: the dialog addon JS only writes field values into its hidden form field on DOM
- * change/click events, so we use `.click()` for checkboxes and `.selectOption()` for selects
- * (both fire the needed events). After enabling, the interval/stop fieldsets become visible.
+ * Gotcha: the dialog addon JS writes field values into its hidden form field from DOM input/change
+ * events, so every edit here must go through a real interaction — `.click()` for checkboxes,
+ * `.selectOption()` for selects, `.fill()` + an explicit change for text fields. After enabling, the
+ * interval/stop fieldsets become visible.
+ *
+ * Mobile-specific persistence (where tapping the native OK button never blurs the edited field, so
+ * `change` alone never fires) is covered by mobile-dialog-persist.spec.ts — the desktop app cannot
+ * reproduce that hosting model.
  */
 export async function setRecurrence(win: Page, config: RecurrenceConfig): Promise<void> {
   await openRecurrenceDialog(win);

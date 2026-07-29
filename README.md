@@ -316,9 +316,9 @@ src/
 ├── gui/
 │   ├── dialog/
 │   │   ├── dialog.ts         # Dialog host-side logic (open/close, result handling)
-│   │   ├── dialog.html       # Dialog UI markup
+│   │   ├── dialog_html.ts    # Dialog UI markup
 │   │   ├── dialog.css        # Dialog styles
-│   │   └── dialog_addon.js   # Dialog webview-side JS (runs inside the dialog iframe)
+│   │   └── dialog_addon.js   # Dialog webview-side JS (runs inside the dialog webview)
 │   ├── menu.ts               # Tools menu registration
 │   └── toolbar.ts            # Note toolbar button registration
 └── model/
@@ -364,7 +364,27 @@ npm test
 
 Tests live in `test/` and use Jest. The test configuration is in `jest.config.js` and `tsconfig.test.json`.
 
-For integration testing, launch Joplin in development mode and load the plugin from the `/publish` folder as a development plugin:
+Run the end-to-end suite:
+
+```bash
+npm run test:e2e
+```
+
+This builds the plugin, downloads the Joplin desktop AppImage into `.e2e-cache/` and runs Playwright
+under a virtual display. Two kinds of test live in `e2e/`:
+
+- **Real-app tests** launch the actual Joplin desktop build with the plugin loaded from `/dist` and
+  drive the genuine GUI.
+- **WebView tests** (`mobile-dialog-persist.spec.ts`) load the recurrence dialog's real markup and
+  addon script into a mobile-emulated Chromium. Joplin mobile is a React Native app and cannot be
+  driven by Playwright, but the one structural difference that causes mobile-only dialog bugs can be:
+  on mobile the dialog's OK/Cancel buttons are native controls **outside** the WebView, so tapping OK
+  never blurs the field the user is editing.
+
+If `npx playwright install` cannot download browsers (offline or restricted CI), point the suite at an
+existing Chromium build with `PLAYWRIGHT_CHROMIUM_PATH=/path/to/chrome`.
+
+For manual integration testing, launch Joplin in development mode and load the plugin from the `/publish` folder as a development plugin:
 
 ```bash
 /path/to/joplin --env dev

@@ -9,20 +9,40 @@ function safeGetElement(id) {
     return el;
 }
 
+/* bindValueChanged ***********************************************************************************************************************
+    Registers a handler for every event that can carry a new value: 'input' (fired on each keystroke) as well as 'change'.
+
+    Listening to 'change' alone loses typed values on mobile. A text/number field only fires 'change' when its edit is committed,
+    i.e. on blur or Enter. On desktop the dialog's OK button is a DOM button, so clicking it blurs the field and 'change' fires just in
+    time. On mobile the OK button is a native control outside the WebView: tapping it never blurs the focused field, so 'change' never
+    fires and whatever the user typed is silently discarded. 'input' fires as the user types and closes that gap.
+*/
+function bindValueChanged(element, handler) {
+    if (!element) return;
+    element.addEventListener("change", handler);
+    element.addEventListener("input", handler);
+}
+
+/* parsePositiveInt ***********************************************************************************************************************
+    Parses a spinbutton value, returning null when it is not a positive whole number. Because values are now persisted while the user is
+    still typing, a field that is momentarily empty (or holds a partial entry) must not overwrite the last good value with 0.
+*/
+function parsePositiveInt(value) {
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed) || parsed < 1) {
+        return null;
+    }
+    return parsed;
+}
+
 let stopFieldset = safeGetElement('stopFieldset');
 let stopTypeDropdown = safeGetElement('stopTypeDropdown');
 let stopNumberSpinbutton = safeGetElement('stopNumberSpinbutton');
 let stopDatePicker = safeGetElement('stopDatePicker');
 
-if (stopTypeDropdown) {
-    stopTypeDropdown.addEventListener("change", onStopTypeChanged);
-}
-if (stopNumberSpinbutton) {
-    stopNumberSpinbutton.addEventListener("change", onStopNumberChanged);
-}
-if (stopDatePicker) {
-    stopDatePicker.addEventListener("change", onStopDateChanged);
-}
+bindValueChanged(stopTypeDropdown, onStopTypeChanged);
+bindValueChanged(stopNumberSpinbutton, onStopNumberChanged);
+bindValueChanged(stopDatePicker, onStopDateChanged);
 
 function onStopTypeChanged() {
     if (!recurrence) return; // Guard against null recurrence
@@ -42,7 +62,9 @@ function onStopTypeChanged() {
 
 function onStopNumberChanged() {
     if (!recurrence || !stopNumberSpinbutton) return;
-    recurrence.stopNumber = stopNumberSpinbutton.value;
+    const stopNumber = parsePositiveInt(stopNumberSpinbutton.value);
+    if (stopNumber === null) return;                                // Mid-edit/invalid entry: keep the last valid value
+    recurrence.stopNumber = stopNumber;
     saveData();
 }
 
@@ -59,12 +81,8 @@ let monthFieldset = safeGetElement('monthFieldset');
 let monthOrdinalDropdown = safeGetElement('monthOrdinalDropdown');
 let monthWeekdayDropdown = safeGetElement('monthWeekdayDropdown');
 
-if (monthWeekdayDropdown) {
-    monthWeekdayDropdown.addEventListener('change', onMonthWeekdayChanged);
-}
-if (monthOrdinalDropdown) {
-    monthOrdinalDropdown.addEventListener('change', onMonthOrdinalChanged);
-}
+bindValueChanged(monthWeekdayDropdown, onMonthWeekdayChanged);
+bindValueChanged(monthOrdinalDropdown, onMonthOrdinalChanged);
 
 function onMonthWeekdayChanged() {
     if (!recurrence || !monthWeekdayDropdown) return;
@@ -97,27 +115,13 @@ let weekThursdayCheckbox = safeGetElement('weekThursdayCheckbox');
 let weekFridayCheckbox = safeGetElement('weekFridayCheckbox');
 let weekSaturdayCheckbox = safeGetElement('weekSaturdayCheckbox');
 
-if (weekSundayCheckbox) {
-    weekSundayCheckbox.addEventListener("change", onWeekSundayCheckboxChanged);
-}
-if (weekMondayCheckbox) {
-    weekMondayCheckbox.addEventListener("change", onWeekMondayCheckboxChanged);
-}
-if (weekTuesdayCheckbox) {
-    weekTuesdayCheckbox.addEventListener("change", onWeekTuesdayCheckboxChanged);
-}
-if (weekWednesdayCheckbox) {
-    weekWednesdayCheckbox.addEventListener("change", onWeekWednesdayCheckboxChanged);
-}
-if (weekThursdayCheckbox) {
-    weekThursdayCheckbox.addEventListener("change", onWeekThursdayCheckboxChanged);
-}
-if (weekFridayCheckbox) {
-    weekFridayCheckbox.addEventListener("change", onWeekFridayCheckboxChanged);
-}
-if (weekSaturdayCheckbox) {
-    weekSaturdayCheckbox.addEventListener("change", onWeekSaturdayCheckboxChanged);
-}
+bindValueChanged(weekSundayCheckbox, onWeekSundayCheckboxChanged);
+bindValueChanged(weekMondayCheckbox, onWeekMondayCheckboxChanged);
+bindValueChanged(weekTuesdayCheckbox, onWeekTuesdayCheckboxChanged);
+bindValueChanged(weekWednesdayCheckbox, onWeekWednesdayCheckboxChanged);
+bindValueChanged(weekThursdayCheckbox, onWeekThursdayCheckboxChanged);
+bindValueChanged(weekFridayCheckbox, onWeekFridayCheckboxChanged);
+bindValueChanged(weekSaturdayCheckbox, onWeekSaturdayCheckboxChanged);
 
 function onWeekSundayCheckboxChanged() {
     if (!recurrence || !weekSundayCheckbox) return;
@@ -163,12 +167,8 @@ let intervalFieldset = safeGetElement('intervalFieldset');     // Gets the inter
 let intervalNumberSpinbutton = safeGetElement('intervalNumberSpinbutton');  // Gets the interval number spinbutton
 let intervalDropdown = safeGetElement('intervalDropdown');     // Gets the interval dropdown
 
-if (intervalDropdown) {
-    intervalDropdown.addEventListener("change", onIntervalChanged);
-}
-if (intervalNumberSpinbutton) {
-    intervalNumberSpinbutton.addEventListener("change", onIntervalNumberChanged);
-}
+bindValueChanged(intervalDropdown, onIntervalChanged);
+bindValueChanged(intervalNumberSpinbutton, onIntervalNumberChanged);
 
 /* onIntervalChanged **********************************************************************************************************************
     Called if thee interval dropdown changes. It saves the changes to the hidden form and toggles the visibility of the other elements
@@ -196,7 +196,9 @@ function onIntervalChanged() {
 */
 function onIntervalNumberChanged() {
     if (!recurrence || !intervalNumberSpinbutton) return;
-    recurrence.intervalNumber = intervalNumberSpinbutton.value;
+    const intervalNumber = parsePositiveInt(intervalNumberSpinbutton.value);
+    if (intervalNumber === null) return;                            // Mid-edit/invalid entry: keep the last valid value
+    recurrence.intervalNumber = intervalNumber;
     saveData();
 }
 
@@ -205,9 +207,7 @@ function onIntervalNumberChanged() {
 ******************************************************************************************************************************************/
 let enabledCheckbox = safeGetElement('enabledCheckbox');       // Gets the enabled checkbox
 
-if (enabledCheckbox) {
-    enabledCheckbox.addEventListener("change", onEnabledChanged);           // Adds callback for when the checbox is ticked
-}
+bindValueChanged(enabledCheckbox, onEnabledChanged);                       // Adds callback for when the checbox is ticked
 
 /* onEnabledChanged ***********************************************************************************************************************
     Called if the enabled checkbox is toggled. It saves the changes to the hidden form and toggles the visibility of the other elements
@@ -328,6 +328,44 @@ function loadData() {
         };
     }
 }
+
+/* syncFromDom ****************************************************************************************************************************
+    Reads the current value of every control straight from the DOM into the recurrence object and saves it.
+
+    A belt-and-braces companion to the per-control listeners, for values a WebView may commit without firing an event we listen to
+    (autofill, a native number pad's "done" key, a date picker). It runs when the dialog is about to go away, which on mobile is the last
+    moment before Joplin reads the form back.
+*/
+function syncFromDom() {
+    if (!recurrence) return;
+    if (enabledCheckbox) recurrence.enabled = enabledCheckbox.checked;
+    if (intervalDropdown) recurrence.interval = intervalDropdown.value;
+    if (intervalNumberSpinbutton) {
+        const intervalNumber = parsePositiveInt(intervalNumberSpinbutton.value);
+        if (intervalNumber !== null) recurrence.intervalNumber = intervalNumber;
+    }
+    if (weekSundayCheckbox) recurrence.weekSunday = weekSundayCheckbox.checked;
+    if (weekMondayCheckbox) recurrence.weekMonday = weekMondayCheckbox.checked;
+    if (weekTuesdayCheckbox) recurrence.weekTuesday = weekTuesdayCheckbox.checked;
+    if (weekWednesdayCheckbox) recurrence.weekWednesday = weekWednesdayCheckbox.checked;
+    if (weekThursdayCheckbox) recurrence.weekThursday = weekThursdayCheckbox.checked;
+    if (weekFridayCheckbox) recurrence.weekFriday = weekFridayCheckbox.checked;
+    if (weekSaturdayCheckbox) recurrence.weekSaturday = weekSaturdayCheckbox.checked;
+    if (monthWeekdayDropdown) recurrence.monthWeekday = monthWeekdayDropdown.value;
+    if (monthOrdinalDropdown) recurrence.monthOrdinal = monthOrdinalDropdown.value;
+    if (stopTypeDropdown) recurrence.stopType = stopTypeDropdown.value;
+    if (stopDatePicker) recurrence.stopDate = stopDatePicker.value;
+    if (stopNumberSpinbutton) {
+        const stopNumber = parsePositiveInt(stopNumberSpinbutton.value);
+        if (stopNumber !== null) recurrence.stopNumber = stopNumber;
+    }
+    saveData();
+}
+
+window.addEventListener('pagehide', syncFromDom);
+document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') syncFromDom();
+});
 
 /* saveData *******************************************************************************************************************************
     Saves data from the dialog recurrence object into the hidden data form
