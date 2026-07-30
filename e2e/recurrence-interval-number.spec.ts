@@ -74,6 +74,46 @@ test.describe('Interval number typed in the dialog', () => {
     }
   });
 
+  test('a day interval typed when first setting up the to-do is kept', async () => {
+    const { win } = joplin;
+    await createTodo(win, 'Every 5 Days ' + Date.now());
+
+    await openRecurrenceDialog(win);
+    const frame = await dialogFrame(win);
+    await setCheckbox(frame, '#enabledCheckbox', true);
+    await frame.locator('#intervalDropdown').selectOption('day');
+    await typeNumberField(frame, '#intervalNumberSpinbutton', 5);
+    await confirmDialog(win);
+
+    const state = await readRecurrenceDialog(win);
+    expect(state.enabled).toBe(true);
+    expect(state.interval).toBe('day');
+    expect(state.intervalNumber).toBe('5');
+  });
+
+  test('a day interval can be edited from 1 to 5 and back down again', async () => {
+    const { win } = joplin;
+    await createTodo(win, 'Edited Days ' + Date.now());
+
+    await openRecurrenceDialog(win);
+    const frame = await dialogFrame(win);
+    await setCheckbox(frame, '#enabledCheckbox', true);
+    await frame.locator('#intervalDropdown').selectOption('day');
+    await confirmDialog(win);
+    expect((await readRecurrenceDialog(win)).intervalNumber).toBe('1');
+
+    for (const days of [5, 3, 1]) {
+      await openRecurrenceDialog(win);
+      const editFrame = await dialogFrame(win);
+      await typeNumberField(editFrame, '#intervalNumberSpinbutton', days);
+      await confirmDialog(win);
+
+      const state = await readRecurrenceDialog(win);
+      expect(state.interval, `interval after typing ${days}`).toBe('day');
+      expect(state.intervalNumber, `interval number after typing ${days}`).toBe(String(days));
+    }
+  });
+
   test('a minute interval nudged with the keyboard arrows is kept', async () => {
     const { win } = joplin;
     await createTodo(win, 'Arrow Minutes ' + Date.now());

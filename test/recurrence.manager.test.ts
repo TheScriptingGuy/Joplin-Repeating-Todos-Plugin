@@ -405,6 +405,41 @@ describe('RecurrenceManager short intervals', () => {
     expect((calledDate as Date).getTime()).toBe(new Date(2026, 1, 11, 9, 0).getTime());
   });
 
+  it('rolls a completed every-5-days to-do past the occurrences it missed', async () => {
+    // Not only a short-interval concern: an alarm left 12 days behind on a 5-day recurrence has two
+    // occurrences already gone by, so the next one is the third.
+    const dueAt = new Date(2025, 11, 29, 9, 0).getTime(); // 12 days before the pinned "now"
+    const todo = makeTodo({
+      todo_due: dueAt,
+      todo_completed: Date.now(),
+      recurrence: dailyRecurrence({ intervalNumber: 5 }),
+    });
+    mockStore.getAllRecurringTodos.mockResolvedValue([todo]);
+
+    await RecurrenceManager.updateAllRecurrences();
+
+    const [, calledDate] = mockApi.setTaskDueDate.mock.calls[0];
+    // 5-day steps from Dec 29 land on Jan 3, Jan 8, Jan 13: the first one after Jan 10.
+    expect((calledDate as Date).getTime()).toBe(new Date(2026, 0, 13, 9, 0).getTime());
+    expect((calledDate as Date).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('advances an every-5-days to-do ticked off ahead of its alarm by exactly 5 days', async () => {
+    // Nothing missed, nothing to skip: the case the roll-forward must leave alone.
+    const dueAt = new Date(2026, 1, 10, 9, 0).getTime();
+    const todo = makeTodo({
+      todo_due: dueAt,
+      todo_completed: Date.now(),
+      recurrence: dailyRecurrence({ intervalNumber: 5 }),
+    });
+    mockStore.getAllRecurringTodos.mockResolvedValue([todo]);
+
+    await RecurrenceManager.updateAllRecurrences();
+
+    const [, calledDate] = mockApi.setTaskDueDate.mock.calls[0];
+    expect((calledDate as Date).getTime()).toBe(new Date(2026, 1, 15, 9, 0).getTime());
+  });
+
   it('does not stall when the interval number was stored as a string', async () => {
     // The dialog's number field reads back as a string, which the date maths would otherwise
     // concatenate instead of add.

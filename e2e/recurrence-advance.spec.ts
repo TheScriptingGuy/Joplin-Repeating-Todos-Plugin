@@ -139,6 +139,54 @@ test.describe('Recurrence advancement', () => {
       .toBe(true);
   });
 
+  test('completing a to-do that repeats every 5 days skips the occurrences it missed', async () => {
+    const { win } = joplin;
+    await createTodo(win, 'Five Day Todo ' + Date.now());
+
+    // The same rule as the short intervals, at a scale where it is easy to read: an alarm 12 days
+    // gone means two 5-day occurrences have already been and went, so the to-do belongs on the third.
+    const base = daysFromNow(-12);
+    const ORIGINAL = alarmString(base);
+    const EXPECTED = alarmString(daysFromNow(3));
+
+    await setAlarm(win, ORIGINAL);
+    await setRecurrence(win, { enabled: true, interval: 'day', intervalNumber: 5 });
+    expect(await readAlarm(win)).toBe(ORIGINAL);
+
+    await completeTodo(win);
+
+    await expect
+      .poll(async () => isTodoComplete(win), { timeout: 15_000, intervals: [500] })
+      .toBe(false);
+
+    await expect
+      .poll(async () => readAlarm(win), { timeout: 15_000, intervals: [1000] })
+      .toBe(EXPECTED);
+  });
+
+  test('completing a to-do that repeats every 5 days ahead of its alarm advances exactly 5 days', async () => {
+    const { win } = joplin;
+    await createTodo(win, 'Five Day Early Todo ' + Date.now());
+
+    // Nothing has been missed here, so there is nothing to skip: the next occurrence is simply the
+    // one after the current alarm. This is the case the roll-forward must NOT disturb.
+    const ORIGINAL = alarmString(daysFromNow(30));
+    const EXPECTED = alarmString(daysFromNow(35));
+
+    await setAlarm(win, ORIGINAL);
+    await setRecurrence(win, { enabled: true, interval: 'day', intervalNumber: 5 });
+
+    await completeTodo(win);
+
+    await expect
+      .poll(async () => isTodoComplete(win), { timeout: 15_000, intervals: [500] })
+      .toBe(false);
+
+    await expect
+      .poll(async () => readAlarm(win), { timeout: 15_000, intervals: [1000] })
+      .toBe(EXPECTED);
+  });
+
   test('an OVERDUE (past-alarm) recurring to-do has its alarm reset forward without being completed', async () => {
     const { win } = joplin;
     await createTodo(win, 'Overdue Todo ' + Date.now());
