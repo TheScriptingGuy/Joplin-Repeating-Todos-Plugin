@@ -20,7 +20,23 @@ function fromNow(ms: number): number {
   return Date.now() + ms;
 }
 
+const ONE_MINUTE = 60 * 1000;
 const ONE_HOUR = 60 * 60 * 1000;
+
+/**
+ * "Now" for the whole suite. The engine always advances a to-do to an occurrence that is still to
+ * come, so the fixed calendar fixtures below (a to-do due Jan 10 09:00 and ticked off at 12:00) only
+ * mean what they say with the clock pinned to that moment.
+ */
+const NOW = new Date(2026, 0, 10, 12, 0);
+
+beforeAll(() => {
+  jest.useFakeTimers({ now: NOW, doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
+});
+
+afterAll(() => {
+  jest.useRealTimers();
+});
 
 /** Build an enabled daily recurrence (optionally overridden). */
 function dailyRecurrence(overrides: Partial<Recurrence> = {}): Recurrence {
@@ -330,6 +346,78 @@ describe('RecurrenceManager alarm reset (per-to-do resetAlarmWhenNotDone)', () =
     expect(mockApi.setTaskDueDate.mock.calls[0][0]).toBe('note-opted-in');
     expect(mockStore.set).toHaveBeenCalledTimes(1);
     expect(mockStore.set.mock.calls[0][0]).toBe('note-opted-in');
+  });
+});
+
+describe('RecurrenceManager short intervals', () => {
+  /** An enabled minute-based recurrence. */
+  function minuteRecurrence(intervalNumber: number): Recurrence {
+    return dailyRecurrence({ interval: 'minute', intervalNumber });
+  }
+
+  it('rolls a completed 5-minute to-do past the occurrences that already went by', async () => {
+    // Nobody ticks a to-do off within five minutes of it being due. One step from the old alarm
+    // would land in the past, reopening the to-do as instantly overdue with no alarm left to fire.
+    const dueAt = fromNow(-12 * ONE_MINUTE);
+    const todo = makeTodo({
+      todo_due: dueAt,
+      todo_completed: Date.now(),
+      recurrence: minuteRecurrence(5),
+    });
+    mockStore.getAllRecurringTodos.mockResolvedValue([todo]);
+
+    await RecurrenceManager.updateAllRecurrences();
+
+    const [, calledDate] = mockApi.setTaskDueDate.mock.calls[0];
+    // 5-minute steps from 12 minutes ago land on -7, -2, +3: the first one still to come.
+    expect((calledDate as Date).getTime()).toBe(dueAt + 15 * ONE_MINUTE);
+    expect((calledDate as Date).getTime()).toBeGreaterThan(Date.now());
+    // Completing still reopens the to-do and resets its sub-tasks.
+    expect(mockApi.markTaskIncomplete).toHaveBeenCalledWith('note-1');
+    expect(mockApi.markSubTasksIncomplete).toHaveBeenCalledWith('note-1');
+  });
+
+  it('lands an every-minute to-do on an alarm that is still to come', async () => {
+    const dueAt = fromNow(-10 * ONE_MINUTE);
+    const todo = makeTodo({
+      todo_due: dueAt,
+      todo_completed: Date.now(),
+      recurrence: minuteRecurrence(1),
+    });
+    mockStore.getAllRecurringTodos.mockResolvedValue([todo]);
+
+    await RecurrenceManager.updateAllRecurrences();
+
+    const [, calledDate] = mockApi.setTaskDueDate.mock.calls[0];
+    expect((calledDate as Date).getTime()).toBe(dueAt + 11 * ONE_MINUTE);
+    expect((calledDate as Date).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('advances a to-do ticked off ahead of its alarm by exactly one interval', async () => {
+    // Nothing to skip here, so the next occurrence is simply the one after the current alarm.
+    const dueAt = new Date(2026, 1, 10, 9, 0).getTime();
+    const todo = makeTodo({ todo_due: dueAt, todo_completed: Date.now() });
+    mockStore.getAllRecurringTodos.mockResolvedValue([todo]);
+
+    await RecurrenceManager.updateAllRecurrences();
+
+    const [, calledDate] = mockApi.setTaskDueDate.mock.calls[0];
+    expect((calledDate as Date).getTime()).toBe(new Date(2026, 1, 11, 9, 0).getTime());
+  });
+
+  it('does not stall when the interval number was stored as a string', async () => {
+    // The dialog's number field reads back as a string, which the date maths would otherwise
+    // concatenate instead of add.
+    const recurrence = minuteRecurrence(5);
+    (recurrence as any).intervalNumber = '5';
+    const dueAt = fromNow(-12 * ONE_MINUTE);
+    const todo = makeTodo({ todo_due: dueAt, todo_completed: Date.now(), recurrence });
+    mockStore.getAllRecurringTodos.mockResolvedValue([todo]);
+
+    await RecurrenceManager.updateAllRecurrences();
+
+    const [, calledDate] = mockApi.setTaskDueDate.mock.calls[0];
+    expect((calledDate as Date).getTime()).toBe(dueAt + 15 * ONE_MINUTE);
   });
 });
 

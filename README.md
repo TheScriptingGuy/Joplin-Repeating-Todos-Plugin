@@ -190,7 +190,7 @@ open.
 When you mark a recurring to-do as complete, the plugin immediately:
 
 1. Looks up the recurrence settings for that note
-2. Calculates the next due date
+2. Calculates the next due date — the first occurrence that is still to come
 3. Updates the alarm date to the next occurrence
 4. Marks the to-do as incomplete again
 5. Resets any sub-tasks to incomplete
@@ -198,6 +198,11 @@ When you mark a recurring to-do as complete, the plugin immediately:
 
 When an alarm passes on a to-do you have not done, steps 4 and 5 are skipped: the to-do stays open
 and keeps its sub-task progress, and only the alarm is moved forward.
+
+Step 2 always lands on an occurrence in the future, skipping any that have already gone by. That is
+what makes short intervals work: a to-do repeating every few minutes is always ticked off later than
+its own alarm, so counting a single interval from the old alarm would set a new one in the past —
+overdue the moment it reopens, with no alarm left to fire.
 
 ```mermaid
 flowchart TD
@@ -210,7 +215,7 @@ flowchart TD
     R -- No --> S([Leave it alone\nwaits for completion])
     R -- Yes --> T[Calculate first occurrence\nstrictly in the future]
     T --> F
-    Q -- Yes --> E[Calculate next\noccurrence date]
+    Q -- Yes --> E[Calculate first occurrence\nstrictly in the future]
     E --> F[Set due date\nto next occurrence]
     F --> G{Was it\ncompleted?}
     G -- No --> I[Check stop condition]

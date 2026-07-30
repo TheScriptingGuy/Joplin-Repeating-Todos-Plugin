@@ -67,6 +67,15 @@ export interface RecurrenceData {
     resetAlarmWhenNotDone: boolean
 }
 
+/** toIntervalNumber ********************************************************************************************************************************
+ * Coerces anything that may stand in for an interval number - a string from a number field, a blank field, a missing value - into a whole number of *
+ * intervals of at least 1. Anything unusable falls back to 1, which is the same default the dialog shows.                                           *
+ ***************************************************************************************************************************************************/
+export function toIntervalNumber(value: unknown): number {
+    const parsed = Math.trunc(Number(value))
+    return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1
+}
+
 export class Recurrence {
 
     /** Public Variables ***************************************************************************************************************************/
@@ -145,15 +154,16 @@ export class Recurrence {
      ***********************************************************************************************************************************************/
     public getNextDate(initial: Date): Date | null {
         if (this.enabled) {
+            const step = this.getIntervalStep()
             const next = new Date(initial.getTime())
             if (this.interval == 'minute') {
-                next.setMinutes(initial.getMinutes() + this.intervalNumber)
+                next.setMinutes(initial.getMinutes() + step)
             } else if (this.interval == 'hour') {
-                next.setHours(initial.getHours() + this.intervalNumber)
+                next.setHours(initial.getHours() + step)
             } else if (this.interval == 'day') {
-                next.setDate(initial.getDate() + this.intervalNumber)
+                next.setDate(initial.getDate() + step)
             } else if (this.interval == 'week') {
-                next.setDate(next.getDate() + this.intervalNumber * 7)
+                next.setDate(next.getDate() + step * 7)
                 if (this.getWeekdaysInt().length > 0) {
                     const validWeekdays = this.getWeekdays(initial).concat(this.getWeekdays(next))
                     validWeekdays.sort((a: Date, b: Date) => { return a.getTime() - b.getTime() })
@@ -165,7 +175,7 @@ export class Recurrence {
                     }
                 }
             } else if (this.interval == 'month') {
-                next.setMonth(initial.getMonth() + this.intervalNumber)
+                next.setMonth(initial.getMonth() + step)
                 if (this.monthOrdinal != "" && this.monthWeekday != "") {
                     const initialDate = new Date(this.getMonthWeekday(initial))
                     const nextDate = new Date(this.getMonthWeekday(next))
@@ -179,16 +189,33 @@ export class Recurrence {
                     }
                 }
             } else if (this.interval == 'year') {
-                next.setFullYear(initial.getFullYear() + this.intervalNumber)
+                next.setFullYear(initial.getFullYear() + step)
             }
             return next
         }
         return null
     }
 
+    /** getIntervalStep *****************************************************************************************************************************
+     * The interval number as a usable whole number of steps, never below 1.                                                                       *
+     *                                                                                                                                              *
+     * The value can arrive as a string from the dialog's number field ('5') or as 0 from a field that was left empty, and Date's setters take both  *
+     * silently: `setMinutes(getMinutes() + '5')` concatenates into minute 305, and a step of 0 stands still, which makes the recurrence look        *
+     * broken rather than wrong. Every date calculation therefore goes through here.                                                                 *
+     ***********************************************************************************************************************************************/
+    private getIntervalStep(): number {
+        return toIntervalNumber(this.intervalNumber)
+    }
+
     /** getNextDateAfter ****************************************************************************************************************************
-     * Starting from `initial`, repeatedly calls getNextDate until the result is strictly after `after`, then returns that Date.                    *
-     * Returns null if the recurrence is disabled, if getNextDate returns null, or if it fails to advance the date (guarding against infinite       *
+     * The first occurrence that is strictly after both `initial` and `after`: it always moves at least one interval on from `initial`, then keeps  *
+     * stepping while the result is not yet past `after`.                                                                                            *
+     *                                                                                                                                              *
+     * Taking that first step unconditionally is what makes short intervals usable. A to-do that repeats every few minutes is always ticked off      *
+     * later than its own alarm, so `initial + one interval` regularly lies in the past; skipping the occurrences that already went by leaves the     *
+     * to-do with an alarm that is still to come instead of one that is instantly overdue and never fires again.                                     *
+     *                                                                                                                                              *
+     * Returns null if the recurrence is disabled, if getNextDate returns null, or if it fails to advance the date (guarding against infinite        *
      * loops).                                                                                                                                      *
      ***********************************************************************************************************************************************/
     public getNextDateAfter(initial: Date, after: Date): Date | null {
@@ -196,7 +223,7 @@ export class Recurrence {
             return null
         }
         let current: Date = initial
-        while (current.getTime() <= after.getTime()) {
+        do {
             const next = this.getNextDate(current)
             if (next === null) {
                 return null
@@ -206,7 +233,7 @@ export class Recurrence {
                 return null
             }
             current = next
-        }
+        } while (current.getTime() <= after.getTime())
         return current
     }
 
@@ -316,7 +343,7 @@ export function recurrenceFromObject(data: Partial<RecurrenceData> | null | unde
     }
     if (data.enabled !== undefined) { recurrence.enabled = Boolean(data.enabled) }
     if (data.interval !== undefined) { recurrence.interval = String(data.interval) }
-    if (data.intervalNumber !== undefined) { recurrence.intervalNumber = Number(data.intervalNumber) }
+    if (data.intervalNumber !== undefined) { recurrence.intervalNumber = toIntervalNumber(data.intervalNumber) }
     if (data.weekSunday !== undefined) { recurrence.weekSunday = Boolean(data.weekSunday) }
     if (data.weekMonday !== undefined) { recurrence.weekMonday = Boolean(data.weekMonday) }
     if (data.weekTuesday !== undefined) { recurrence.weekTuesday = Boolean(data.weekTuesday) }
@@ -367,7 +394,7 @@ export function recurrenceFromJSON(JSONstring: string): Recurrence {
     const parsedJSON = JSON.parse(JSONstring)
     const recurrence = new Recurrence()
     recurrence.enabled = Boolean(parsedJSON.enabled)
-    recurrence.intervalNumber = Number(parsedJSON.intervalNumber)
+    recurrence.intervalNumber = toIntervalNumber(parsedJSON.intervalNumber)
     recurrence.interval = String(parsedJSON.interval)
     recurrence.weekSunday = Boolean(parsedJSON.weekSunday)
     recurrence.weekMonday = Boolean(parsedJSON.weekMonday)

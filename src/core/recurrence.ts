@@ -187,6 +187,9 @@ export class RecurrenceManager {
    *    alarm re-armed on the next one; the to-do stays open and any sub-task progress is left
    *    untouched. Off by default, so a repeating to-do that is not done stays overdue.
    *
+   * Either way the to-do lands on its next occurrence that is still to come, never on one that has
+   * already gone by.
+   *
    * Both paths consume one occurrence, so a stop-after-N recurrence counts skipped alarms too.
    */
   @Trace()
@@ -211,13 +214,13 @@ export class RecurrenceManager {
     }
 
     const initialDate = new Date(todo.todo_due);
-    // A skipped occurrence has to land in the future, otherwise a to-do that was missed several
-    // intervals ago (Joplin closed over the weekend, say) would only creep forward one step.
-    const notBefore = after ?? (completed ? null : now);
-    const nextDate =
-      notBefore == null
-        ? recurrence.getNextDate(initialDate)
-        : recurrence.getNextDateAfter(initialDate, notBefore);
+    // The next occurrence always has to land in the future, on either path. A to-do that was missed
+    // several intervals ago (Joplin closed over the weekend, say) would otherwise only creep forward
+    // one step, and a to-do on a short interval - every few minutes - is always ticked off after its
+    // own alarm, so one step from the old alarm would put the next occurrence in the past: reopened
+    // and instantly overdue, with no alarm left to fire and nothing to move it on again.
+    const notBefore = after ?? now;
+    const nextDate = recurrence.getNextDateAfter(initialDate, notBefore);
 
     if (!nextDate) return;
 
