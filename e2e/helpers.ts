@@ -105,7 +105,7 @@ const WEEKDAY_IDS: Record<string, string> = {
 };
 
 /** Set a checkbox to a desired state, only clicking when needed (click fires the change event). */
-async function setCheckbox(frame: Frame, selector: string, desired: boolean): Promise<void> {
+export async function setCheckbox(frame: Frame, selector: string, desired: boolean): Promise<void> {
   const loc = frame.locator(selector);
   const isChecked = await loc.isChecked();
   if (isChecked !== desired) {
@@ -158,6 +158,29 @@ export async function setRecurrence(win: Page, config: RecurrenceConfig): Promis
   }
 
   // The dialog's OK button is rendered by Joplin OUTSIDE the iframe in the main page.
+  await win.locator('button:has-text("OK")').last().click();
+  await win.waitForTimeout(SETTLE);
+}
+
+/**
+ * Type a number into a spinbutton the way a user does: click into the field, select whatever is in
+ * it and type the digits. Deliberately fires NO synthetic `change` event, so it reproduces the real
+ * GUI flow where the user types a value and clicks OK straight away — the input never loses focus
+ * inside the iframe, so `change` may never fire at all.
+ */
+export async function typeNumberField(
+  frame: Frame,
+  selector: string,
+  value: number
+): Promise<void> {
+  const input = frame.locator(selector);
+  await input.click();
+  await input.press('ControlOrMeta+a');
+  await input.pressSequentially(String(value), { delay: 60 });
+}
+
+/** Click the dialog's OK button, which Joplin renders OUTSIDE the iframe in the main page. */
+export async function confirmDialog(win: Page): Promise<void> {
   await win.locator('button:has-text("OK")').last().click();
   await win.waitForTimeout(SETTLE);
 }

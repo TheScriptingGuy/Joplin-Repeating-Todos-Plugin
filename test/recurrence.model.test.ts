@@ -201,6 +201,44 @@ describe('Recurrence.getNextDateAfter', () => {
 		expect(result).not.toBeNull();
 		expect(result!.getTime()).toBeGreaterThan(after.getTime());
 	});
+
+	it('always moves at least one interval on, even when initial is already past after', () => {
+		// Returning `initial` untouched here would mean a completed to-do keeps the alarm it just had.
+		const initial = new Date(2026, 0, 10, 9, 0);
+		const after = new Date(2026, 0, 1, 9, 0);
+		const r = makeRecurrence({ enabled: true, interval: 'day', intervalNumber: 1 });
+		const result = r.getNextDateAfter(initial, after);
+		expect(result!.getTime()).toBe(new Date(2026, 0, 11, 9, 0).getTime());
+	});
+
+	it('skips the minute occurrences that already passed (short-interval case)', () => {
+		// A to-do that repeats every 5 minutes, ticked off 12 minutes after it was due.
+		const initial = new Date(2026, 0, 10, 9, 0);
+		const after = new Date(2026, 0, 10, 9, 12);
+		const r = makeRecurrence({ enabled: true, interval: 'minute', intervalNumber: 5 });
+		const result = r.getNextDateAfter(initial, after);
+		expect(result!.getTime()).toBe(new Date(2026, 0, 10, 9, 15).getTime());
+	});
+});
+
+describe('Recurrence.getNextDate - unusable interval numbers', () => {
+	const initial = new Date(2026, 0, 1, 9, 30);
+
+	it('adds a minute interval given as a string instead of concatenating it', () => {
+		const r = makeRecurrence({ enabled: true, interval: 'minute' });
+		// The dialog's number field reads back as a string: '30' + '5' would be minute 305.
+		(r as any).intervalNumber = '5';
+		expect(r.getNextDate(initial)!.getTime()).toBe(new Date(2026, 0, 1, 9, 35).getTime());
+	});
+
+	it('treats a zero or blank interval number as one, so the date always advances', () => {
+		for (const value of [0, '', null, undefined, NaN, -3, 1.7]) {
+			const r = makeRecurrence({ enabled: true, interval: 'minute' });
+			(r as any).intervalNumber = value;
+			// One minute on, whatever nonsense the field held: never standing still.
+			expect(r.getNextDate(initial)!.getTime()).toBe(new Date(2026, 0, 1, 9, 31).getTime());
+		}
+	});
 });
 
 describe('Recurrence.updateStopStatus', () => {
@@ -307,6 +345,15 @@ describe('Object round-trip (recurrenceToObject / recurrenceFromObject)', () => 
 		expect(r.stopType).toBe('never');
 	});
 
+	it('normalises an interval number that arrives as a string or a blank', () => {
+		// The dialog stores whatever its number field holds, and that is a string - or nothing at all
+		// while it is being retyped.
+		expect(recurrenceFromObject({ intervalNumber: '5' as any }).intervalNumber).toBe(5);
+		expect(recurrenceFromObject({ intervalNumber: '' as any }).intervalNumber).toBe(1);
+		expect(recurrenceFromObject({ intervalNumber: 0 }).intervalNumber).toBe(1);
+		expect(recurrenceFromObject({ intervalNumber: -2 }).intervalNumber).toBe(1);
+	});
+
 	it('leaves the alarm reset off for recurrences stored before the option existed', () => {
 		// Recurrences written by an older version carry no resetAlarmWhenNotDone key, so they must
 		// keep the default: an open to-do stays overdue until it is ticked off.
@@ -353,6 +400,24 @@ describe('JSON round-trip (recurrenceToJSON / recurrenceFromJSON)', () => {
 		expect(round.stopDate).toBe(r.stopDate);
 		expect(round.stopNumber).toBe(r.stopNumber);
 		expect(round.resetAlarmWhenNotDone).toBe(r.resetAlarmWhenNotDone);
+	});
+
+	it('reads back an interval number the dialog wrote as a string', () => {
+		// What the dialog's hidden form field actually carries: number inputs are strings.
+		const r = recurrenceFromJSON(
+			JSON.stringify({ enabled: true, interval: 'minute', intervalNumber: '5' })
+		);
+		expect(r.intervalNumber).toBe(5);
+		expect(r.getNextDate(new Date(2026, 0, 1, 9, 30))!.getTime()).toBe(
+			new Date(2026, 0, 1, 9, 35).getTime()
+		);
+	});
+
+	it('falls back to every 1 interval when the number field was left empty', () => {
+		const r = recurrenceFromJSON(
+			JSON.stringify({ enabled: true, interval: 'minute', intervalNumber: '' })
+		);
+		expect(r.intervalNumber).toBe(1);
 	});
 
 	it('JSON shape contains exactly the persisted field set', () => {

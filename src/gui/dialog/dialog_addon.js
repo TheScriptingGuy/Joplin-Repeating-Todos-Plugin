@@ -9,6 +9,23 @@ function safeGetElement(id) {
     return el;
 }
 
+/* numberFieldValue **********************************************************************************************************************
+    Reads a spinbutton as a whole number, kept inside the field's own min/max. A number field reads back as a string and is empty while it
+    is being retyped, and both of those go straight into the recurrence as '5' or 0 - a string the date maths concatenates instead of adds,
+    or a zero-length interval that never moves. Anything unusable therefore falls back to `fallback`, which keeps the last good value.
+*/
+function numberFieldValue(input, fallback) {
+    const parsed = Math.trunc(Number(input.value));
+    if (!Number.isFinite(parsed) || input.value === '') {
+        return fallback;
+    }
+    const min = Number(input.min);
+    const max = Number(input.max);
+    if (Number.isFinite(min) && parsed < min) return fallback;
+    if (Number.isFinite(max) && parsed > max) return max;
+    return parsed;
+}
+
 let stopFieldset = safeGetElement('stopFieldset');
 let stopTypeDropdown = safeGetElement('stopTypeDropdown');
 let stopNumberSpinbutton = safeGetElement('stopNumberSpinbutton');
@@ -18,10 +35,15 @@ if (stopTypeDropdown) {
     stopTypeDropdown.addEventListener("change", onStopTypeChanged);
 }
 if (stopNumberSpinbutton) {
+    // 'input' as well as 'change': a number field only fires 'change' once the edit is committed
+    // (blur or Enter), and the dialog's OK button lives outside this iframe, so mirroring on every
+    // keystroke is what guarantees a typed value is in the hidden form field when OK is pressed.
     stopNumberSpinbutton.addEventListener("change", onStopNumberChanged);
+    stopNumberSpinbutton.addEventListener("input", onStopNumberChanged);
 }
 if (stopDatePicker) {
     stopDatePicker.addEventListener("change", onStopDateChanged);
+    stopDatePicker.addEventListener("input", onStopDateChanged);
 }
 
 function onStopTypeChanged() {
@@ -42,7 +64,7 @@ function onStopTypeChanged() {
 
 function onStopNumberChanged() {
     if (!recurrence || !stopNumberSpinbutton) return;
-    recurrence.stopNumber = stopNumberSpinbutton.value;
+    recurrence.stopNumber = numberFieldValue(stopNumberSpinbutton, recurrence.stopNumber);
     saveData();
 }
 
@@ -167,7 +189,10 @@ if (intervalDropdown) {
     intervalDropdown.addEventListener("change", onIntervalChanged);
 }
 if (intervalNumberSpinbutton) {
+    // See the note on the stop-number field: 'input' keeps the hidden form field in step with what
+    // has been typed, so "every 5 minutes" is saved whether or not the field is ever committed.
     intervalNumberSpinbutton.addEventListener("change", onIntervalNumberChanged);
+    intervalNumberSpinbutton.addEventListener("input", onIntervalNumberChanged);
 }
 
 /* onIntervalChanged **********************************************************************************************************************
@@ -196,7 +221,7 @@ function onIntervalChanged() {
 */
 function onIntervalNumberChanged() {
     if (!recurrence || !intervalNumberSpinbutton) return;
-    recurrence.intervalNumber = intervalNumberSpinbutton.value;
+    recurrence.intervalNumber = numberFieldValue(intervalNumberSpinbutton, recurrence.intervalNumber);
     saveData();
 }
 
@@ -277,85 +302,101 @@ if (document.readyState === 'loading') {
     loadData();
 }
 
+/* defaultRecurrence **********************************************************************************************************************
+    The recurrence a dialog starts from when there is nothing to load. These match both the plugin's own defaults and the values the form
+    markup shows, so a fresh dialog never claims one interval while displaying another.
+*/
+function defaultRecurrence() {
+    return {
+        enabled: false,
+        interval: 'minute',
+        intervalNumber: 1,
+        weekSunday: false,
+        weekMonday: false,
+        weekTuesday: false,
+        weekWednesday: false,
+        weekThursday: false,
+        weekFriday: false,
+        weekSaturday: false,
+        monthWeekday: '',
+        monthOrdinal: 'first',
+        stopType: 'never',
+        stopDate: '',
+        stopNumber: 1,
+        resetAlarmWhenNotDone: false
+    };
+}
+
 /* loadData *******************************************************************************************************************************
-    Loads data from the hidden data form into the dialog recurrence object
+    Loads data from the hidden data form into the dialog recurrence object.
+
+    Whatever happens - data present, missing or unreadable - the recurrence object and the form fields are filled from the same values, so
+    what the dialog shows is always what pressing OK will save.
 */
 function loadData() {
     if (!recurrenceInput) {
         console.warn('recurrenceDataInput element not found. Skipping loadData.');
         return;
     }
+
+    recurrence = defaultRecurrence();
+
     try {
         var encodedRecurrenceData = recurrenceInput.value;                   // gets the encoded recurrence data from the hidden form
-        if (!encodedRecurrenceData) {
+        if (encodedRecurrenceData) {
+            var decodedRecurrenceData = atob(encodedRecurrenceData);         // decodes the recurrence data into the json string
+            // Layer the stored values over the defaults, so a field the stored data does not carry
+            // (an older recurrence saved before that field existed) keeps its default.
+            recurrence = Object.assign(defaultRecurrence(), JSON.parse(decodedRecurrenceData));
+        } else {
             console.warn('No encoded recurrence data found. Initializing with defaults.');
-            recurrence = {
-                enabled: false,
-                interval: 'day',
-                intervalNumber: 1,
-                weekSunday: false,
-                weekMonday: false,
-                weekTuesday: false,
-                weekWednesday: false,
-                weekThursday: false,
-                weekFriday: false,
-                weekSaturday: false,
-                monthWeekday: '',
-                monthOrdinal: '',
-                stopType: '',
-                stopDate: '',
-                stopNumber: 0,
-                resetAlarmWhenNotDone: false
-            };
-            return;
         }
-        var decodedRecurrenceData = atob(encodedRecurrenceData);             // decodes the recurrence data into the json string
-        recurrence = JSON.parse(decodedRecurrenceData);                      // parse the recurrence json string into a usable data object
-
-        // Safely set properties only if elements exist
-        if (enabledCheckbox) enabledCheckbox.checked = recurrence.enabled || false;
-        if (intervalNumberSpinbutton) intervalNumberSpinbutton.value = recurrence.intervalNumber || 1;
-        if (intervalDropdown) intervalDropdown.value = recurrence.interval || 'day';
-        if (weekSundayCheckbox) weekSundayCheckbox.checked = recurrence.weekSunday || false;
-        if (weekMondayCheckbox) weekMondayCheckbox.checked = recurrence.weekMonday || false;
-        if (weekTuesdayCheckbox) weekTuesdayCheckbox.checked = recurrence.weekTuesday || false;
-        if (weekWednesdayCheckbox) weekWednesdayCheckbox.checked = recurrence.weekWednesday || false;
-        if (weekThursdayCheckbox) weekThursdayCheckbox.checked = recurrence.weekThursday || false;
-        if (weekFridayCheckbox) weekFridayCheckbox.checked = recurrence.weekFriday || false;
-        if (weekSaturdayCheckbox) weekSaturdayCheckbox.checked = recurrence.weekSaturday || false;
-        if (monthWeekdayDropdown) monthWeekdayDropdown.value = recurrence.monthWeekday || '';
-        if (monthOrdinalDropdown) monthOrdinalDropdown.value = recurrence.monthOrdinal || '';
-        if (stopTypeDropdown) stopTypeDropdown.value = recurrence.stopType || '';
-        if (stopDatePicker) stopDatePicker && (stopDatePicker.value = recurrence.stopDate ? String(recurrence.stopDate) : "");
-        if (stopNumberSpinbutton) stopNumberSpinbutton.value = recurrence.stopNumber || 0;
-        if (resetAlarmCheckbox) resetAlarmCheckbox.checked = recurrence.resetAlarmWhenNotDone || false;
-
-        onEnabledChanged();
-        onIntervalChanged();
-        onMonthWeekdayChanged();
-        onStopTypeChanged();
     } catch (error) {
         console.error('Error loading recurrence data:', error);
-        // Initialize with defaults on error
-        recurrence = {
-            enabled: false,
-            interval: 'day',
-            intervalNumber: 1,
-            weekSunday: false,
-            weekMonday: false,
-            weekTuesday: false,
-            weekWednesday: false,
-            weekThursday: false,
-            weekFriday: false,
-            weekSaturday: false,
-            monthWeekday: '',
-            monthOrdinal: '',
-            stopType: '',
-            stopDate: '',
-            stopNumber: 0,
-            resetAlarmWhenNotDone: false
-        };
+        recurrence = defaultRecurrence();
     }
+
+    applyRecurrenceToForm();
+
+    onEnabledChanged();
+    onIntervalChanged();
+    onMonthWeekdayChanged();
+    onStopTypeChanged();
+}
+
+/* applyRecurrenceToForm ******************************************************************************************************************
+    Writes the recurrence object into the form fields, skipping any element the markup does not have.
+*/
+function applyRecurrenceToForm() {
+    var defaults = defaultRecurrence();
+    if (enabledCheckbox) enabledCheckbox.checked = Boolean(recurrence.enabled);
+    if (intervalNumberSpinbutton) intervalNumberSpinbutton.value = wholeNumberOr(recurrence.intervalNumber, defaults.intervalNumber);
+    if (intervalDropdown) intervalDropdown.value = recurrence.interval || defaults.interval;
+    if (weekSundayCheckbox) weekSundayCheckbox.checked = Boolean(recurrence.weekSunday);
+    if (weekMondayCheckbox) weekMondayCheckbox.checked = Boolean(recurrence.weekMonday);
+    if (weekTuesdayCheckbox) weekTuesdayCheckbox.checked = Boolean(recurrence.weekTuesday);
+    if (weekWednesdayCheckbox) weekWednesdayCheckbox.checked = Boolean(recurrence.weekWednesday);
+    if (weekThursdayCheckbox) weekThursdayCheckbox.checked = Boolean(recurrence.weekThursday);
+    if (weekFridayCheckbox) weekFridayCheckbox.checked = Boolean(recurrence.weekFriday);
+    if (weekSaturdayCheckbox) weekSaturdayCheckbox.checked = Boolean(recurrence.weekSaturday);
+    if (monthWeekdayDropdown) monthWeekdayDropdown.value = recurrence.monthWeekday || '';
+    if (monthOrdinalDropdown) monthOrdinalDropdown.value = recurrence.monthOrdinal || defaults.monthOrdinal;
+    if (stopTypeDropdown) stopTypeDropdown.value = recurrence.stopType || defaults.stopType;
+    if (stopDatePicker) stopDatePicker.value = recurrence.stopDate ? String(recurrence.stopDate) : '';
+    if (stopNumberSpinbutton) stopNumberSpinbutton.value = wholeNumberOr(recurrence.stopNumber, defaults.stopNumber);
+    if (resetAlarmCheckbox) resetAlarmCheckbox.checked = Boolean(recurrence.resetAlarmWhenNotDone);
+
+    // Keep the object itself in step with the sanitised values now shown in the spinbuttons.
+    if (intervalNumberSpinbutton) recurrence.intervalNumber = Number(intervalNumberSpinbutton.value);
+    if (stopNumberSpinbutton) recurrence.stopNumber = Number(stopNumberSpinbutton.value);
+}
+
+/* wholeNumberOr **************************************************************************************************************************
+    A stored value as a whole number of at least 1, or `fallback` when it is missing, blank or not a number.
+*/
+function wholeNumberOr(value, fallback) {
+    var parsed = Math.trunc(Number(value));
+    return Number.isFinite(parsed) && parsed >= 1 ? parsed : fallback;
 }
 
 /* saveData *******************************************************************************************************************************
